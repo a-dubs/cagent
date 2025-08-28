@@ -4,7 +4,7 @@ import { SettingsDialog } from '@/components/SettingsDialog'
 import { Button } from '@/components/ui/button'
 import { Settings, FileText, Play, Square } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings'
-import { Message, Session } from '@/types'
+import { Message, Session, PendingToolCall, CompletedToolCall } from '@/types'
 import { apiClient } from '@/lib/api'
 
 export function App() {
@@ -94,15 +94,34 @@ export function App() {
       const decoder = new TextDecoder()
       let buffer = ''
 
-      const finishAssistant = (acc: string) => {
-        if (!acc) return
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: acc,
-          timestamp: new Date().toISOString(),
+      // Create the assistant message that will accumulate content and tools
+      const assistantMessageId = (Date.now() + 1).toString()
+      let assistantMessageCreated = false
+      
+      const ensureAssistantMessage = () => {
+        if (!assistantMessageCreated) {
+          const assistantMessage: Message = {
+            id: assistantMessageId,
+            role: 'assistant',
+            content: '',
+            timestamp: new Date().toISOString(),
+            pendingTools: [],
+            completedTools: []
+          }
+          setMessages((prev: Message[]) => [...prev, assistantMessage])
+          assistantMessageCreated = true
         }
-  setMessages((prev: Message[]) => [...prev, assistantMessage])
+      }
+
+      const updateAssistantMessage = (updater: (msg: Message) => Message) => {
+        setMessages((prev) => {
+          const newMessages = [...prev]
+          const assistantIndex = newMessages.findIndex(m => m.id === assistantMessageId)
+          if (assistantIndex >= 0) {
+            newMessages[assistantIndex] = updater(newMessages[assistantIndex])
+          }
+          return newMessages
+        })
       }
 
       let accContent = ''
@@ -124,8 +143,71 @@ export function App() {
             if (!dataStr) continue
             try {
               const evt = JSON.parse(dataStr)
+              // Process known event types
               if (evt.type === 'agent_choice' && evt.choice?.delta?.content) {
                 accContent += evt.choice.delta.content
+                ensureAssistantMessage()
+                updateAssistantMessage(msg => ({ ...msg, content: accContent }))
+              } else if (evt.type === 'tool_call_confirmation') {
+                const toolName = evt.tool_call?.function?.name || 'Tool'
+                const args = evt.tool_call?.function?.arguments
+                const toolId = evt.tool_call?.id || Date.now().toString()
+                
+                const pendingTool: PendingToolCall = {
+                  id: toolId,
+                  name: toolName,
+                  args: args,
+                  status: 'pending_approval',
+                  timestamp: new Date().toISOString()
+                }
+                
+                ensureAssistantMessage()
+                updateAssistantMessage(msg => ({
+                  ...msg,
+                  pendingTools: [...(msg.pendingTools || []), pendingTool]
+                }))
+              } else if (evt.type === 'tool_call') {
+                // Tool execution started - mark as executing
+                const toolId = evt.tool_call?.id
+                if (toolId) {
+                  ensureAssistantMessage()
+                  updateAssistantMessage(msg => ({
+                    ...msg,
+                    pendingTools: (msg.pendingTools || []).map(tool => 
+                      tool.id === toolId ? { ...tool, status: 'executing' as const } : tool
+                    )
+                  }))
+                }
+              } else if (evt.type === 'tool_call_response') {
+                // Tool execution completed
+                const toolName = evt.tool_call?.function?.name || 'Tool'
+                const args = evt.tool_call?.function?.arguments
+                const output = evt.response || ''
+                const toolId = evt.tool_call?.id || Date.now().toString()
+
+                const completedTool: CompletedToolCall = {
+                  id: toolId,
+                  name: toolName,
+                  args: args,
+                  output: output,
+                  timestamp: new Date().toISOString()
+                }
+
+                // If this is a "think" style tool, parse into thinking block
+                if ((toolName || '').toLowerCase().includes('think')) {
+                  const [first, ...rest] = (output || '').split(/\r?\n/)
+                  completedTool.thinking = {
+                    summary: first || 'Thinking...',
+                    full: rest.join('\n') || output || ''
+                  }
+                }
+
+                ensureAssistantMessage()
+                updateAssistantMessage(msg => ({
+                  ...msg,
+                  pendingTools: (msg.pendingTools || []).filter(t => t.id !== toolId),
+                  completedTools: [...(msg.completedTools || []), completedTool]
+                }))
               } else if (evt.type === 'error') {
                 throw new Error(evt.error || 'Agent error')
               }
@@ -136,7 +218,11 @@ export function App() {
         }
       }
 
-      finishAssistant(accContent)
+      // Final content update if there's any remaining content
+      if (accContent) {
+        ensureAssistantMessage()
+        updateAssistantMessage(msg => ({ ...msg, content: accContent }))
+      }
     } catch (error) {
       console.error('Failed to send message:', error)
       const errorMessage: Message = {
@@ -148,6 +234,50 @@ export function App() {
   setMessages((prev: Message[]) => [...prev, errorMessage])
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // Send resume / confirmation to server: confirmation can be 'approve', 'approve-session', or 'reject'
+  const sendConfirmation = async (confirmation: 'approve' | 'approve-session' | 'reject') => {
+    if (!currentSession) return
+    try {
+  await apiClient.post(`/sessions/${currentSession.id}/resume`, { confirmation })
+    } catch (e) {
+      console.error('Failed to send confirmation', e)
+    }
+  }
+
+  // Handle tool approval from the enhanced UI
+  const handleToolApproval = async (toolId: string, approval: 'approve' | 'approve-session' | 'reject') => {
+    if (!currentSession) return
+    
+    // Update the tool status to show it's been approved/rejected
+    setMessages((prev) => {
+      const newMessages = [...prev]
+      // Find the message that contains this tool
+      for (let i = newMessages.length - 1; i >= 0; i--) {
+        if (newMessages[i].role === 'assistant' && newMessages[i].pendingTools) {
+          const toolIndex = newMessages[i].pendingTools!.findIndex(t => t.id === toolId)
+          if (toolIndex >= 0) {
+            const updatedMessage = { ...newMessages[i] }
+            updatedMessage.pendingTools = [...(updatedMessage.pendingTools || [])]
+            updatedMessage.pendingTools[toolIndex] = {
+              ...updatedMessage.pendingTools[toolIndex],
+              status: approval === 'reject' ? 'pending_approval' : 'approved' as const
+            }
+            newMessages[i] = updatedMessage
+            break
+          }
+        }
+      }
+      return newMessages
+    })
+
+    // Send the approval to the backend
+    try {
+      await apiClient.post(`/sessions/${currentSession.id}/resume`, { confirmation: approval })
+    } catch (e) {
+      console.error('Failed to send tool approval', e)
     }
   }
 
@@ -232,6 +362,8 @@ export function App() {
               messages={messages}
               onSendMessage={sendMessage}
               isLoading={isLoading}
+              onConfirm={(c) => sendConfirmation(c)}
+              onToolApprove={handleToolApproval}
             />
           </div>
         )}

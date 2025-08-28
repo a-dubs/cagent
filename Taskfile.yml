@@ -4,6 +4,7 @@ vars:
   BINARY_NAME: cagent{{if eq OS "windows"}}.exe{{end}}
   MAIN_PKG: ./main.go
   BUILD_DIR: ./bin
+  AGENTS_PATH: ./examples/config
   GIT_TAG:
     sh: git describe --tags --exact-match 2>/dev/null || echo dev
   GIT_COMMIT:
@@ -29,6 +30,45 @@ tasks:
       - "vite.config.ts"
     generates:
       - "dist/**/*"
+
+  web:install:
+    desc: Install web dependencies (npm install)
+    dir: web
+    cmds:
+      - npm install
+    sources:
+      - "package.json"
+      - "package-lock.json"
+    generates:
+      - "node_modules"
+
+  web:dev:prepare:
+    desc: Ensure web/dist exists for go:embed during dev
+    cmds:
+      - mkdir -p web/dist
+      - |
+        if [ ! -f web/dist/.placeholder ]; then echo dev > web/dist/.placeholder; fi
+
+  web:dev:backend:
+    desc: Run Go API server on :8080 with agents from {{.AGENTS_PATH}}
+    deps:
+      - web:dev:prepare
+    cmds:
+      - go run . web {{.AGENTS_PATH}} -d -l :8080
+
+  web:dev:frontend:
+    desc: Run Vite dev server with proxy to :8080
+    deps:
+      - web:install
+    dir: web
+    cmds:
+      - npm run dev
+
+  web:dev:
+    desc: Run frontend and backend dev servers together (Vite on :5173, API on :8080)
+    deps:
+      - web:dev:backend
+      - web:dev:frontend
 
   build:
     desc: Build the application binary

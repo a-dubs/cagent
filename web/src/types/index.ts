@@ -38,10 +38,54 @@ export interface Session {
 
 export interface Message {
   id: string
-  role: 'user' | 'assistant'
-  content: string
+  role: 'user' | 'assistant' | 'tool' | 'system'
+  // Content can be a single string or an array of items returned by the model.
+  // When an array is received the UI should render each item on its own line.
+  content: string | string[]
   timestamp: string
   toolCalls?: ToolCall[]
+  // For tool call confirmations emitted by the server
+  confirmation?: {
+    tool_call: ToolCall
+  }
+  // For linking tool responses back to the originating call
+  toolCallID?: string
+  // For individual tool message rendering
+  tool?: {
+    name: string
+    type?: string
+    args?: string
+  }
+  toolOutput?: string
+  // For think tool outputs: provide a short summary and full thoughts
+  thinking?: {
+    summary: string
+    full: string
+  }
+  // Enhanced tool call tracking
+  pendingTools?: PendingToolCall[]
+  completedTools?: CompletedToolCall[]
+}
+
+export interface PendingToolCall {
+  id: string
+  name: string
+  args?: string
+  status: 'pending_approval' | 'approved' | 'executing'
+  timestamp: string
+}
+
+export interface CompletedToolCall {
+  id: string
+  name: string
+  args?: string
+  output?: string
+  thinking?: {
+    summary: string
+    full: string
+  }
+  timestamp: string
+  duration?: number
 }
 
 export interface ToolCall {

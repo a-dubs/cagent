@@ -1,17 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Send, Bot, User } from 'lucide-react'
+import { Send, Bot, User, Terminal, Brain, Wrench, Search, FileText } from 'lucide-react'
 import { Message } from '@/types'
+import { ToolCallDisplay } from '@/components/ToolCallDisplay'
 import ReactMarkdown from 'react-markdown'
 
 interface ChatInterfaceProps {
   messages: Message[]
   onSendMessage: (message: string) => void
   isLoading: boolean
+  onConfirm?: (confirmation: 'approve' | 'approve-session' | 'reject') => void
+  onToolApprove?: (toolId: string, approval: 'approve' | 'approve-session' | 'reject') => void
 }
 
-export function ChatInterface({ messages, onSendMessage, isLoading }: ChatInterfaceProps) {
+export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, onToolApprove }: ChatInterfaceProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -38,10 +41,19 @@ export function ChatInterface({ messages, onSendMessage, isLoading }: ChatInterf
     }
   }
 
+  const ToolIcon = ({ name }: { name?: string }) => {
+    const n = (name || '').toLowerCase()
+    if (n.includes('shell') || n.includes('sh') || n.includes('cmd') || n.includes('script')) return <Terminal className="h-4 w-4" />
+    if (n.includes('think') || n.includes('reason')) return <Brain className="h-4 w-4" />
+    if (n.includes('search') || n.includes('grep') || n.includes('find')) return <Search className="h-4 w-4" />
+    if (n.includes('file') || n.includes('read')) return <FileText className="h-4 w-4" />
+    return <Wrench className="h-4 w-4" />
+  }
+
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 && (
           <div className="text-center text-muted-foreground py-8">
             <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -49,33 +61,103 @@ export function ChatInterface({ messages, onSendMessage, isLoading }: ChatInterf
           </div>
         )}
         
-        {messages.map((message) => (
+          {messages.filter(message => {
+          // Filter out tool messages since we handle them in assistant messages
+          if (message.role === 'tool') return false
+          // Filter out empty assistant messages  
+          if (message.role === 'assistant') {
+            const hasContent = message.content && typeof message.content === 'string' && message.content.trim()
+            const hasTools = (message.pendingTools && message.pendingTools.length > 0) || 
+                            (message.completedTools && message.completedTools.length > 0)
+            return hasContent || hasTools
+          }
+          return true
+        }).map((message) => (
           <div
             key={message.id}
             className={`flex gap-3 ${
-              message.role === 'assistant' ? 'justify-start' : 'justify-end'
+              message.role === 'user' ? 'justify-end' : 'justify-start'
             }`}
           >
-            {message.role === 'assistant' && (
+            {message.role !== 'user' && (
               <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                <Bot className="h-4 w-4 text-primary-foreground" />
+                {message.role === 'assistant' ? (
+                  <Bot className="h-4 w-4 text-primary-foreground" />
+                ) : (
+                  <span className="text-primary-foreground">
+                    <ToolIcon name={message.tool?.name} />
+                  </span>
+                )}
               </div>
             )}
             
             <div
-              className={`max-w-[70%] rounded-lg px-4 py-2 ${
-                message.role === 'assistant'
-                  ? 'bg-muted text-muted-foreground'
-                  : 'bg-primary text-primary-foreground'
+              className={`max-w-[70%] rounded-lg px-3 py-2 ${
+                message.role === 'user'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground'
               }`}
             >
-              {message.role === 'assistant' ? (
-                <div className="prose prose-sm max-w-none dark:prose-invert">
-                  <ReactMarkdown>{message.content}</ReactMarkdown>
-                </div>
-              ) : (
-                <p className="whitespace-pre-wrap">{message.content}</p>
-              )}
+              {(() => {
+                const contentStr = Array.isArray(message.content)
+                  ? message.content.join('\n')
+                  : message.content
+
+                if (message.role === 'assistant') {
+                  const hasTools = (message.pendingTools && message.pendingTools.length > 0) || 
+                                   (message.completedTools && message.completedTools.length > 0)
+                  return (
+                    <div className="space-y-2">
+                      {/* Show tool calls first if there are any */}
+                      {hasTools && (
+                        <ToolCallDisplay 
+                          pendingTools={message.pendingTools}
+                          completedTools={message.completedTools}
+                          onApprove={onToolApprove}
+                        />
+                      )}
+                      {/* Show content only if there's actual text content */}
+                      {contentStr && contentStr.trim() && (
+                        <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
+                          <ReactMarkdown>{contentStr}</ReactMarkdown>
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+                if (message.role === 'tool') {
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 font-semibold">
+                        <ToolIcon name={message.tool?.name} />
+                        <span>{message.tool?.name ? message.tool.name : 'Tool'}</span>
+                      </div>
+                      {message.tool?.args && (
+                        <div className="text-xs opacity-70">
+                          Args: <code className="break-words">{message.tool.args}</code>
+                        </div>
+                      )}
+                      {message.thinking ? (
+                        <details className="mt-1 p-2 border rounded">
+                          <summary className="font-medium">Thinking: {message.thinking.summary}</summary>
+                          <div className="mt-2 whitespace-pre-wrap text-sm opacity-90">{message.thinking.full}</div>
+                        </details>
+                      ) : null}
+                      {message.toolOutput && (
+                        <div className="mt-1">
+                          <div className="text-xs font-medium mb-1 opacity-70">Output:</div>
+                          <pre className="text-xs whitespace-pre-wrap bg-background/50 rounded p-2 max-h-80 overflow-auto">{message.toolOutput}</pre>
+                        </div>
+                      )}
+                      {!message.toolOutput && !message.thinking && contentStr && (
+                        <p className="whitespace-pre-wrap">{contentStr}</p>
+                      )}
+                    </div>
+                  )
+                }
+                // system or others
+                return <p className="whitespace-pre-wrap">{contentStr}</p>
+              })()}
               
               {message.toolCalls && message.toolCalls.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-border/20">
@@ -84,6 +166,19 @@ export function ChatInterface({ messages, onSendMessage, isLoading }: ChatInterf
                   </div>
                 </div>
               )}
+
+              {/* Confirmation UI for tool calls */}
+              {message.confirmation && (
+                <div className="mt-2 pt-2 border-t border-border/20 flex gap-2 items-center">
+                  <div className="text-sm">This action requires confirmation:</div>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => onConfirm && onConfirm('approve')}>Yes</Button>
+                    <Button size="sm" onClick={() => onConfirm && onConfirm('approve-session')}>All</Button>
+                    <Button size="sm" variant="destructive" onClick={() => onConfirm && onConfirm('reject')}>No</Button>
+                  </div>
+                </div>
+              )}
+              {/* For assistant messages we already render Markdown above; thinking for tools is handled in tool block */}
             </div>
 
             {message.role === 'user' && (

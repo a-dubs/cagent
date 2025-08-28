@@ -14,6 +14,8 @@ import (
 	"github.com/docker/cagent/pkg/tools"
 )
 
+func boolPtr(b bool) *bool { return &b }
+
 type FilesystemTool struct {
 	allowedDirectories []string
 	allowedTools       []string
@@ -71,6 +73,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "create_directory",
 				Description: "Create a new directory or ensure a directory exists. Can create multiple nested directories in one operation.",
+				Annotations: tools.ToolAnnotation{DestructiveHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -88,6 +91,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "directory_tree",
 				Description: "Get a recursive tree view of files and directories as a JSON structure.",
+				Annotations: tools.ToolAnnotation{ReadOnlyHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -109,6 +113,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "edit_file",
 				Description: "Make line-based edits to a text file. Each edit replaces exact line sequences with new content.",
+				Annotations: tools.ToolAnnotation{DestructiveHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -148,6 +153,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "get_file_info",
 				Description: "Retrieve detailed metadata about a file or directory.",
+				Annotations: tools.ToolAnnotation{ReadOnlyHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -165,6 +171,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "list_allowed_directories",
 				Description: "Returns a list of directories that the server has permission to access.",
+				Annotations: tools.ToolAnnotation{ReadOnlyHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type:       "object",
 					Properties: map[string]any{},
@@ -176,6 +183,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "add_allowed_directory",
 				Description: "Request to add a new directory to the allowed directories list. This requires explicit user consent for security reasons.",
+				Annotations: tools.ToolAnnotation{IdempotentHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -201,6 +209,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "list_directory",
 				Description: "Get a detailed listing of all files and directories in a specified path.",
+				Annotations: tools.ToolAnnotation{ReadOnlyHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -218,6 +227,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "list_directory_with_sizes",
 				Description: "Get a detailed listing of all files and directories in a specified path, including sizes.",
+				Annotations: tools.ToolAnnotation{ReadOnlyHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -235,6 +245,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "move_file",
 				Description: "Move or rename files and directories.",
+				Annotations: tools.ToolAnnotation{DestructiveHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -256,6 +267,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "read_file",
 				Description: "Read the complete contents of a file from the file system.",
+				Annotations: tools.ToolAnnotation{ReadOnlyHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -273,6 +285,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "read_multiple_files",
 				Description: "Read the contents of multiple files simultaneously.",
+				Annotations: tools.ToolAnnotation{ReadOnlyHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -293,6 +306,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "search_files",
 				Description: "Recursively search for files and directories matching a pattern.",
+				Annotations: tools.ToolAnnotation{ReadOnlyHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -321,6 +335,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "search_files_content",
 				Description: "Searches for text or regex patterns in the content of files matching a GLOB pattern.",
+				Annotations: tools.ToolAnnotation{ReadOnlyHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -357,6 +372,7 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 			Function: &tools.FunctionDefinition{
 				Name:        "write_file",
 				Description: "Create a new file or completely overwrite an existing file with new content.",
+				Annotations: tools.ToolAnnotation{DestructiveHint: boolPtr(true)},
 				Parameters: tools.FunctionParamaters{
 					Type: "object",
 					Properties: map[string]any{
@@ -380,16 +396,22 @@ func (t *FilesystemTool) Tools(ctx context.Context) ([]tools.Tool, error) {
 		return tls, nil
 	}
 
-	allowedTools := []tools.Tool{}
-	for _, tool := range t.allowedTools {
-		allowedTools = append(allowedTools, tools.Tool{
-			Function: &tools.FunctionDefinition{
-				Name:        tool,
-				Description: tool,
-			},
-		})
+	// Filter the full tool list preserving handlers for only the allowed tool names
+	allowedSet := map[string]struct{}{}
+	for _, n := range t.allowedTools {
+		allowedSet[n] = struct{}{}
 	}
-	return allowedTools, nil
+
+	filtered := make([]tools.Tool, 0, len(t.allowedTools))
+	for _, tool := range tls {
+		if tool.Function == nil {
+			continue
+		}
+		if _, ok := allowedSet[tool.Function.Name]; ok {
+			filtered = append(filtered, tool)
+		}
+	}
+	return filtered, nil
 }
 
 // Security helper to check if path is allowed
