@@ -34,7 +34,17 @@ agents with specialized capabilities and tools. It features:
    task build
    ```
 
-2. **Set your API key:**
+2. **Recommended: Use Docker AI Gateway (no provider keys required):**
+
+  Create a `.env` file in the repo root (or export in your shell):
+
+  ```bash
+  echo "CAGENT_MODELS_GATEWAY=https://gw.docker.com/models" > .env
+  ```
+
+  This lets cagent route requests through Docker AI Gateway. You don't need OpenAI or Anthropic keys.
+
+  Alternatively, set provider keys directly:
 
    ```bash
    # For OpenAI

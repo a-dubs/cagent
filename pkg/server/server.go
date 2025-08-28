@@ -724,21 +724,27 @@ func (s *Server) deleteAgent(c echo.Context) error {
 }
 
 func (s *Server) getAgents(c echo.Context) error {
-	// Refresh agents from disk to get the latest configurations
-	if err := s.refreshAgentsFromDisk(c.Request().Context()); err != nil {
-		s.logger.Error("Failed to refresh agents from disk", "error", err)
+	// List agent YAML files from disk without loading providers/models
+	if s.agentsDir == "" {
+		return c.JSON(http.StatusOK, []map[string]string{})
+	}
+
+	entries, err := os.ReadDir(s.agentsDir)
+	if err != nil {
+		s.logger.Error("Failed to read agents directory", "dir", s.agentsDir, "error", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list agents"})
 	}
 
 	agentList := make([]map[string]string, 0)
-	for id, t := range s.teams {
-		a := t.Agent("root")
-		if a == nil {
-			s.logger.Error("Agent root not found", "team", id)
+	for _, e := range entries {
+		if e.IsDir() || (!strings.HasSuffix(e.Name(), ".yaml") && !strings.HasSuffix(e.Name(), ".yml")) {
 			continue
 		}
+		name := e.Name()
+		name = strings.TrimSuffix(name, filepath.Ext(name))
 		agentList = append(agentList, map[string]string{
-			"name":        id,
-			"description": a.Description(),
+			"name":        name,
+			"description": name,
 		})
 	}
 	return c.JSON(http.StatusOK, agentList)
@@ -872,9 +878,34 @@ func (s *Server) runAgent(c echo.Context) error {
 	agentFilename := c.Param("agent")
 	sessionID := c.Param("id")
 
+	// Load the team lazily if not already loaded
 	t, exists := s.teams[agentFilename]
 	if !exists {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "runtime not found"})
+		// Resolve path and try to load
+		var path string
+		if strings.HasSuffix(agentFilename, ".yaml") || strings.HasSuffix(agentFilename, ".yml") {
+			path = filepath.Join(s.agentsDir, agentFilename)
+		} else {
+			path = filepath.Join(s.agentsDir, agentFilename+".yaml")
+		}
+		// Check if file exists, try .yml fallback
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			alt := filepath.Join(s.agentsDir, agentFilename+".yml")
+			if _, err2 := os.Stat(alt); err2 == nil {
+				path = alt
+			} else {
+				return c.JSON(http.StatusNotFound, map[string]string{"error": "agent not found"})
+			}
+		}
+		// Load team now
+		teamLoaded, err := teamloader.Load(c.Request().Context(), path, s.runConfig, s.logger)
+		if err != nil {
+			s.logger.Error("Failed to load agent on demand", "path", path, "error", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to load agent"})
+		}
+		key := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+		s.teams[key] = teamLoaded
+		t = teamLoaded
 	}
 	sess, err := s.sessionStore.GetSession(c.Request().Context(), sessionID)
 	if err != nil {

@@ -14,6 +14,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/google/go-containerregistry v0.20.6
 	github.com/google/uuid v1.6.0
+	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.13.4
 	github.com/mark3labs/mcp-go v0.38.0
 	github.com/mattn/go-sqlite3 v1.14.32

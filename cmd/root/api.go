@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
 	latest "github.com/docker/cagent/pkg/config/v1"
 	"github.com/docker/cagent/pkg/server"
 	"github.com/docker/cagent/pkg/session"
-	"github.com/docker/cagent/pkg/teamloader"
+	"github.com/docker/cagent/pkg/team"
 )
 
 var (
@@ -75,24 +76,14 @@ func runHttp(cmd *cobra.Command, autoRunTools bool, args []string) error {
 	}
 	if stat.IsDir() {
 		opts = append(opts, server.WithAgentsDir(agentsPath))
+	} else {
+		opts = append(opts, server.WithAgentsDir(filepath.Dir(agentsPath)))
 	}
-
-	teams, err := teamloader.LoadTeams(ctx, agentsPath, runConfig, logger)
-	if err != nil {
-		return fmt.Errorf("failed to load teams: %w", err)
-	}
-	defer func() {
-		for _, team := range teams {
-			if err := team.StopToolSets(); err != nil {
-				logger.Error("Failed to stop tool sets", "error", err)
-			}
-		}
-	}()
 
 	if autoRunTools {
 		opts = append(opts, server.WithAutoRunTools(true))
 	}
 
-	s := server.New(logger, sessionStore, runConfig, teams, opts...)
+	s := server.New(logger, sessionStore, runConfig, make(map[string]*team.Team), opts...)
 	return s.Serve(ctx, ln)
 }

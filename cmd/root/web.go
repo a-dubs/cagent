@@ -9,10 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	latest "github.com/docker/cagent/pkg/config/v1"
 	"github.com/docker/cagent/pkg/server"
 	"github.com/docker/cagent/pkg/session"
-	"github.com/docker/cagent/pkg/teamloader"
+	"github.com/docker/cagent/pkg/team"
 )
 
 var WebAssets embed.FS
@@ -20,7 +19,6 @@ var WebAssets embed.FS
 var (
 	webListenAddr string
 	webSessionDb  string
-	webRunConfig  latest.RuntimeConfig
 )
 
 func SetWebAssets(assets embed.FS) {
@@ -41,7 +39,7 @@ func NewWebCmd() *cobra.Command {
 
 	cmd.PersistentFlags().StringVarP(&webListenAddr, "listen", "l", ":8080", "Address to listen on")
 	cmd.PersistentFlags().StringVarP(&webSessionDb, "session-db", "s", "session.db", "Path to the session database")
-	cmd.PersistentFlags().StringSliceVar(&webRunConfig.EnvFiles, "env-from-file", nil, "Set environment variables from file")
+	cmd.PersistentFlags().StringSliceVar(&runConfig.EnvFiles, "env-from-file", nil, "Set environment variables from file")
 	addGatewayFlags(cmd)
 
 	return cmd
@@ -76,7 +74,6 @@ func runWeb(cmd *cobra.Command, args []string) error {
 	}
 
 	var opts []server.Opt
-
 	stat, err := os.Stat(agentsPath)
 	if err != nil {
 		return fmt.Errorf("failed to stat agents path: %w", err)
@@ -84,18 +81,6 @@ func runWeb(cmd *cobra.Command, args []string) error {
 	if stat.IsDir() {
 		opts = append(opts, server.WithAgentsDir(agentsPath))
 	}
-
-	teams, err := teamloader.LoadTeams(ctx, agentsPath, webRunConfig, logger)
-	if err != nil {
-		return fmt.Errorf("failed to load teams: %w", err)
-	}
-	defer func() {
-		for _, team := range teams {
-			if err := team.StopToolSets(); err != nil {
-				logger.Error("Failed to stop tool sets", "error", err)
-			}
-		}
-	}()
 
 	// Add web frontend
 	webFS, err := fs.Sub(WebAssets, "web/dist")
@@ -106,6 +91,7 @@ func runWeb(cmd *cobra.Command, args []string) error {
 
 	opts = append(opts, server.WithAutoRunTools(true))
 
-	s := server.New(logger, sessionStore, webRunConfig, teams, opts...)
+	// Lazy-load teams on demand in the server; start with an empty map.
+	s := server.New(logger, sessionStore, runConfig, make(map[string]*team.Team), opts...)
 	return s.Serve(ctx, ln)
 }

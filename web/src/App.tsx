@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ChatInterface } from '@/components/ChatInterface'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { Button } from '@/components/ui/button'
@@ -13,9 +13,26 @@ export function App() {
   const [isLoading, setIsLoading] = useState(false)
   const [currentSession, setCurrentSession] = useState<Session | null>(null)
   const [agentRunning, setAgentRunning] = useState(false)
+  const [agents, setAgents] = useState<{ name: string; description: string }[]>([])
+  const [selectedAgent, setSelectedAgent] = useState<string>('')
+  const sseController = useRef<AbortController | null>(null)
 
   // Check if settings are configured
-  const isConfigured = settings.agentConfigPath.trim() !== ''
+  const isConfigured = selectedAgent.trim() !== ''
+
+  useEffect(() => {
+    // load agents from backend
+    apiClient.get<{ name: string; description: string }[]>(`/agents`).then(setAgents).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    // if user stored a preferred agent name, select it when list loads
+    if (!selectedAgent && settings.agentConfigPath) {
+      setSelectedAgent(settings.agentConfigPath)
+    } else if (!selectedAgent && agents.length > 0) {
+      setSelectedAgent(agents[0].name)
+    }
+  }, [agents])
 
   const startNewSession = async () => {
     try {
@@ -24,11 +41,7 @@ export function App() {
         return
       }
 
-      const session = await apiClient.post<Session>('/sessions', {
-        agentPath: settings.agentConfigPath,
-        workingDir: settings.workingDirectory,
-        envVars: settings.environmentVariables
-      })
+  const session = await apiClient.post<Session>('/sessions')
 
       setCurrentSession(session)
       setMessages([])
@@ -52,7 +65,7 @@ export function App() {
   }
 
   const sendMessage = async (content: string) => {
-    if (!currentSession || !agentRunning) {
+  if (!currentSession || !agentRunning || !selectedAgent) {
       alert('No active session. Please start an agent session first.')
       return
     }
@@ -64,25 +77,66 @@ export function App() {
       timestamp: new Date().toISOString()
     }
 
-    setMessages(prev => [...prev, userMessage])
+  setMessages((prev: Message[]) => [...prev, userMessage])
     setIsLoading(true)
 
     try {
-      // For now, we'll simulate the streaming response
-      // In a real implementation, you'd connect to the streaming endpoint
-      const response = await apiClient.post(`/sessions/${currentSession.id}/agent/root`, {
-        message: content
-      }) as any
+      // The backend expects an array of messages with role/content
+      const body = [ { role: 'user', content } ]
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.message || 'Agent response received',
-        timestamp: new Date().toISOString(),
-        toolCalls: response.toolCalls
+      // Start SSE stream
+      sseController.current?.abort()
+      const controller = new AbortController()
+      sseController.current = controller
+
+      const stream = await apiClient.streamPost(`/sessions/${currentSession.id}/agent/${encodeURIComponent(selectedAgent)}`, body)
+      const reader = stream.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      const finishAssistant = (acc: string) => {
+        if (!acc) return
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: acc,
+          timestamp: new Date().toISOString(),
+        }
+  setMessages((prev: Message[]) => [...prev, assistantMessage])
       }
 
-      setMessages(prev => [...prev, assistantMessage])
+      let accContent = ''
+
+      // Read SSE chunks
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        // Process lines
+        const lines = buffer.split(/\r?\n/)
+        buffer = lines.pop() || ''
+        for (const line of lines) {
+          const trimmed = line.trim()
+          if (!trimmed) continue
+          if (trimmed.startsWith('data:')) {
+            const dataStr = trimmed.slice(5).trim()
+            if (!dataStr) continue
+            try {
+              const evt = JSON.parse(dataStr)
+              if (evt.type === 'agent_choice' && evt.choice?.delta?.content) {
+                accContent += evt.choice.delta.content
+              } else if (evt.type === 'error') {
+                throw new Error(evt.error || 'Agent error')
+              }
+            } catch (e) {
+              // ignore parse errors of non-JSON events
+            }
+          }
+        }
+      }
+
+      finishAssistant(accContent)
     } catch (error) {
       console.error('Failed to send message:', error)
       const errorMessage: Message = {
@@ -91,7 +145,7 @@ export function App() {
         content: 'Sorry, there was an error processing your message. Please try again.',
         timestamp: new Date().toISOString()
       }
-      setMessages(prev => [...prev, errorMessage])
+  setMessages((prev: Message[]) => [...prev, errorMessage])
     } finally {
       setIsLoading(false)
     }
@@ -145,7 +199,7 @@ export function App() {
         {/* Status Bar */}
         <div className="px-4 pb-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-4">
-            <span>Config: {settings.agentConfigPath || 'Not configured'}</span>
+            <span>Agent: {selectedAgent || 'Not selected'}</span>
             <span>•</span>
             <span>Working Dir: {settings.workingDirectory}</span>
             <span>•</span>
@@ -162,8 +216,7 @@ export function App() {
               <FileText className="h-16 w-16 mx-auto text-muted-foreground" />
               <h2 className="text-2xl font-semibold">Welcome to cagent</h2>
               <p className="text-muted-foreground max-w-md">
-                Get started by configuring your agent settings. You'll need to specify 
-                an agent configuration file and set up your working directory.
+                Get started by configuring your agent settings. Select an agent and set up your working directory.
               </p>
               <SettingsDialog>
                 <Button size="lg" className="mt-4">

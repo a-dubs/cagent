@@ -29,13 +29,11 @@ export interface Toolset {
   [key: string]: any
 }
 
+// Backend session shape (minimal fields we use)
 export interface Session {
   id: string
-  agentPath: string
-  workingDir: string
-  envVars: Record<string, string>
-  createdAt: string
-  updatedAt: string
+  title?: string
+  createdAt?: string
 }
 
 export interface Message {

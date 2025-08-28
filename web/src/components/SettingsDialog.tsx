@@ -1,10 +1,11 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Settings, Plus, Trash2 } from 'lucide-react'
 import { useSettings } from '@/hooks/useSettings'
+import { apiClient } from '@/lib/api'
 
 interface SettingsDialogProps {
   children?: React.ReactNode
@@ -16,6 +17,11 @@ export function SettingsDialog({ children }: SettingsDialogProps) {
   const [tempSettings, setTempSettings] = useState(settings)
   const [newEnvKey, setNewEnvKey] = useState('')
   const [newEnvValue, setNewEnvValue] = useState('')
+  const [agents, setAgents] = useState<{ name: string; description: string }[]>([])
+
+  useEffect(() => {
+    apiClient.get<{ name: string; description: string }[]>('/agents').then(setAgents).catch(() => setAgents([]))
+  }, [])
 
   const handleOpen = (open: boolean) => {
     if (open) {
@@ -80,17 +86,23 @@ export function SettingsDialog({ children }: SettingsDialogProps) {
         </DialogHeader>
         
         <div className="grid gap-6">
-          {/* Agent Config Path */}
+          {/* Default Agent Selection */}
           <div className="grid gap-2">
-            <Label htmlFor="agentConfigPath">Agent Configuration File</Label>
+            <Label htmlFor="agentConfigPath">Default Agent (filename without extension)</Label>
             <Input
               id="agentConfigPath"
+              list="agent-options"
               value={tempSettings.agentConfigPath}
               onChange={(e) => setTempSettings(prev => ({ ...prev, agentConfigPath: e.target.value }))}
-              placeholder="Path to your agent configuration file (e.g., /path/to/agent.yaml)"
+              placeholder="e.g., code, agent, writer"
             />
+            <datalist id="agent-options">
+              {agents.map(a => (
+                <option key={a.name} value={a.name}>{a.description}</option>
+              ))}
+            </datalist>
             <p className="text-sm text-muted-foreground">
-              Select the YAML configuration file for your agent
+              Choose which agent to use by default. This should match a file in your agents directory (e.g., <code>code.yaml</code> → <code>code</code>).
             </p>
           </div>
 

@@ -52,6 +52,7 @@ export class ApiClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Accept': 'text/event-stream',
       },
       body: data ? JSON.stringify(data) : undefined,
     })
