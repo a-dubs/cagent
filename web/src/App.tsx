@@ -3,53 +3,72 @@ import { ChatInterface } from '@/components/ChatInterface'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { Button } from '@/components/ui/button'
 import { Settings, FileText, Play, Square } from 'lucide-react'
-import { useSettings } from '@/hooks/useSettings'
-import { Message, Session, PendingToolCall, CompletedToolCall } from '@/types'
+
+import { Message, Session, PendingToolCall, CompletedToolCall, AgentSetup } from '@/types'
 import { apiClient } from '@/lib/api'
+import { AgentSetupManager } from '@/components/AgentSetupManager'
+import { AgentConfigManager } from '@/components/AgentConfigManager'
 
 export function App() {
-  const { settings } = useSettings()
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [currentSession, setCurrentSession] = useState<Session | null>(null)
   const [agentRunning, setAgentRunning] = useState(false)
-  const [agents, setAgents] = useState<{ name: string; description: string }[]>([])
   const [selectedAgent, setSelectedAgent] = useState<string>('')
+  const [currentAgentSetup, setCurrentAgentSetup] = useState<AgentSetup | null>(null)
+  const [sessions, setSessions] = useState<Session[]>([])
   const sseController = useRef<AbortController | null>(null)
 
   // Check if settings are configured
-  const isConfigured = selectedAgent.trim() !== ''
+  const isConfigured = currentAgentSetup !== null
 
   useEffect(() => {
-    // load agents from backend
-    apiClient.get<{ name: string; description: string }[]>(`/agents`).then(setAgents).catch(() => {})
+    // load chat sessions
+    loadSessions()
   }, [])
 
-  useEffect(() => {
-    // if user stored a preferred agent name, select it when list loads
-    if (!selectedAgent && settings.agentConfigPath) {
-      setSelectedAgent(settings.agentConfigPath)
-    } else if (!selectedAgent && agents.length > 0) {
-      setSelectedAgent(agents[0].name)
+  const loadSessions = async () => {
+    try {
+      const data = await apiClient.get<Session[]>('/sessions')
+      setSessions(data)
+    } catch (error) {
+      console.error('Failed to load sessions:', error)
     }
-  }, [agents])
+  }
 
   const startNewSession = async () => {
     try {
       if (!isConfigured) {
-        alert('Please configure your agent settings first')
+        alert('Please configure your agent setup first')
         return
       }
 
-  const session = await apiClient.post<Session>('/sessions')
-
+      const session = await apiClient.post<Session>('/sessions')
       setCurrentSession(session)
       setMessages([])
       setAgentRunning(true)
+      loadSessions() // Refresh session list
     } catch (error) {
       console.error('Failed to start session:', error)
       alert('Failed to start agent session. Please check your configuration.')
     }
+  }
+
+  const loadSession = async (sessionId: string) => {
+    try {
+      const session = await apiClient.get<Session>(`/sessions/${sessionId}`)
+      setCurrentSession(session)
+      // Convert session messages to Message format if needed
+      setMessages([]) // Will need to implement message conversion
+      setAgentRunning(false)
+    } catch (error) {
+      console.error('Failed to load session:', error)
+    }
+  }
+
+  const handleAgentSetupSelect = (setup: AgentSetup) => {
+    setCurrentAgentSetup(setup)
+    setSelectedAgent(setup.name) // Use setup name as agent reference
   }
 
   const stopSession = async () => {
@@ -329,11 +348,15 @@ export function App() {
         {/* Status Bar */}
         <div className="px-4 pb-2 text-sm text-muted-foreground">
           <div className="flex items-center gap-4">
-            <span>Agent: {selectedAgent || 'Not selected'}</span>
-            <span>•</span>
-            <span>Working Dir: {settings.workingDirectory}</span>
-            <span>•</span>
-            <span>Env Vars: {Object.keys(settings.environmentVariables).length}</span>
+            <span>Setup: {currentAgentSetup?.name || 'Not configured'}</span>
+            {currentAgentSetup && (
+              <>
+                <span>•</span>
+                <span>Working Dir: {currentAgentSetup.working_directory}</span>
+                <span>•</span>
+                <span>Env Vars: {Object.keys(currentAgentSetup.environment_variables).length}</span>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -341,19 +364,42 @@ export function App() {
       {/* Main Content */}
       <div className="flex-1 flex">
         {!isConfigured ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center space-y-4 p-8">
-              <FileText className="h-16 w-16 mx-auto text-muted-foreground" />
-              <h2 className="text-2xl font-semibold">Welcome to cagent</h2>
-              <p className="text-muted-foreground max-w-md">
-                Get started by configuring your agent settings. Select an agent and set up your working directory.
-              </p>
-              <SettingsDialog>
-                <Button size="lg" className="mt-4">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Configure Settings
-                </Button>
-              </SettingsDialog>
+          <div className="flex-1 flex">
+            {/* Left sidebar - Agent Configuration & Setup Managers */}
+            <div className="w-1/3 border-r p-4 overflow-y-auto space-y-6">
+              <AgentConfigManager />
+              <AgentSetupManager onSetupSelect={handleAgentSetupSelect} />
+            </div>
+            
+            {/* Right side - Session History */}
+            <div className="flex-1 p-4">
+              <div className="text-center space-y-4">
+                <FileText className="h-16 w-16 mx-auto text-muted-foreground" />
+                <h2 className="text-2xl font-semibold">Welcome to cagent</h2>
+                <p className="text-muted-foreground max-w-md mx-auto">
+                  Select an agent setup from the left to get started, or create a new one.
+                </p>
+              </div>
+              
+              {sessions.length > 0 && (
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold mb-4">Recent Sessions</h3>
+                  <div className="space-y-2">
+                    {sessions.slice(0, 10).map((session) => (
+                      <div
+                        key={session.id}
+                        className="p-3 border rounded-lg cursor-pointer hover:bg-muted"
+                        onClick={() => loadSession(session.id)}
+                      >
+                        <div className="font-medium">{session.title || 'Untitled Session'}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {new Date(session.createdAt || '').toLocaleDateString()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ) : (

@@ -28,10 +28,11 @@ func SetWebAssets(assets embed.FS) {
 // NewWebCmd creates a new web command
 func NewWebCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "web <agent-file>|<agents-dir>",
+		Use:   "web [agent-file|agents-dir]",
 		Short: "Start the web interface server",
-		Long:  `Start the web interface server with a nice frontend for interacting with agents`,
-		Args:  cobra.ExactArgs(1),
+		Long: `Start the web interface server with a nice frontend for interacting with agents. 
+If no agent directory is provided, it will use CAGENT_REPO_PATH environment variable to auto-load examples.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runWeb(cmd, args)
 		},
@@ -47,7 +48,20 @@ func NewWebCmd() *cobra.Command {
 
 func runWeb(cmd *cobra.Command, args []string) error {
 	ctx := cmd.Context()
-	agentsPath := args[0]
+
+	// Determine agents path from args or environment variable
+	var agentsPath string
+	if len(args) > 0 {
+		agentsPath = args[0]
+	} else {
+		// Use CAGENT_REPO_PATH environment variable and add /examples
+		repoPath := os.Getenv("CAGENT_REPO_PATH")
+		if repoPath != "" {
+			agentsPath = fmt.Sprintf("%s/examples", repoPath)
+		} else {
+			return fmt.Errorf("no agent directory provided and CAGENT_REPO_PATH environment variable not set")
+		}
+	}
 
 	logger := newLogger()
 

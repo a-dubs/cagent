@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -118,6 +119,21 @@ func New(logger *slog.Logger, sessionStore session.Store, runConfig latest.Runti
 	// Run an agent loop
 	api.POST("/sessions/:id/agent/:agent", s.runAgent)
 	api.GET("/desktop/token", s.getDesktopToken)
+
+	// Agent Setup endpoints
+	api.GET("/agent-setups", s.getAgentSetups)
+	api.GET("/agent-setups/:id", s.getAgentSetup)
+	api.POST("/agent-setups", s.createAgentSetup)
+	api.PUT("/agent-setups/:id", s.updateAgentSetup)
+	api.DELETE("/agent-setups/:id", s.deleteAgentSetup)
+
+	// Custom Agent Paths endpoints
+	api.GET("/custom-agent-paths", s.getCustomAgentPaths)
+	api.POST("/custom-agent-paths", s.addCustomAgentPath)
+	api.DELETE("/custom-agent-paths/:id", s.deleteCustomAgentPath)
+
+	// Directory browsing endpoint
+	api.GET("/directories", s.browseDirectories)
 
 	return s
 }
@@ -994,4 +1010,175 @@ func fromStore(reference string) (string, error) {
 	b.Close()
 
 	return buf.String(), nil
+}
+
+// Agent Setup handlers
+func (s *Server) getAgentSetups(c echo.Context) error {
+	setups, err := s.sessionStore.GetAgentSetups(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, setups)
+}
+
+func (s *Server) getAgentSetup(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+	}
+
+	setup, err := s.sessionStore.GetAgentSetup(c.Request().Context(), id)
+	if err != nil {
+		if err == session.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "Agent setup not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, setup)
+}
+
+func (s *Server) createAgentSetup(c echo.Context) error {
+	var setup session.AgentSetup
+	if err := c.Bind(&setup); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+
+	createdSetup, err := s.sessionStore.CreateAgentSetup(c.Request().Context(), &setup)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusCreated, createdSetup)
+}
+
+func (s *Server) updateAgentSetup(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+	}
+
+	var setup session.AgentSetup
+	if err := c.Bind(&setup); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+
+	setup.ID = id
+	if err := s.sessionStore.UpdateAgentSetup(c.Request().Context(), &setup); err != nil {
+		if err == session.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "Agent setup not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, setup)
+}
+
+func (s *Server) deleteAgentSetup(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+	}
+
+	if err := s.sessionStore.DeleteAgentSetup(c.Request().Context(), id); err != nil {
+		if err == session.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "Agent setup not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// Custom Agent Paths handlers
+func (s *Server) getCustomAgentPaths(c echo.Context) error {
+	paths, err := s.sessionStore.GetCustomAgentPaths(c.Request().Context())
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, paths)
+}
+
+func (s *Server) addCustomAgentPath(c echo.Context) error {
+	var path session.CustomAgentPath
+	if err := c.Bind(&path); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid request body"})
+	}
+
+	createdPath, err := s.sessionStore.AddCustomAgentPath(c.Request().Context(), &path)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusCreated, createdPath)
+}
+
+func (s *Server) deleteCustomAgentPath(c echo.Context) error {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Invalid ID"})
+	}
+
+	if err := s.sessionStore.DeleteCustomAgentPath(c.Request().Context(), id); err != nil {
+		if err == session.ErrNotFound {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "Custom agent path not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	return c.NoContent(http.StatusNoContent)
+}
+
+// Directory browsing handler
+func (s *Server) browseDirectories(c echo.Context) error {
+	path := c.QueryParam("path")
+	if path == "" {
+		// Default to user's home directory
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Could not get home directory"})
+		}
+		path = homeDir
+	}
+
+	// Handle ~ expansion
+	if strings.HasPrefix(path, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Could not get home directory"})
+		}
+		path = filepath.Join(homeDir, path[2:])
+	} else if path == "~" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Could not get home directory"})
+		}
+		path = homeDir
+	}
+
+	// Security check to prevent directory traversal attacks
+	cleanPath := filepath.Clean(path)
+	if !filepath.IsAbs(cleanPath) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Path must be absolute"})
+	}
+
+	entries, err := os.ReadDir(cleanPath)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "Could not read directory"})
+	}
+
+	var directories []map[string]interface{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// Only show directories, not files
+			directories = append(directories, map[string]interface{}{
+				"name": entry.Name(),
+				"path": filepath.Join(cleanPath, entry.Name()),
+			})
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"path":        cleanPath,
+		"directories": directories,
+	})
 }

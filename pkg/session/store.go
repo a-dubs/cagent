@@ -32,11 +32,15 @@ type Store interface {
 	GetSessions(ctx context.Context) ([]*Session, error)
 	DeleteSession(ctx context.Context, id string) error
 	UpdateSession(ctx context.Context, session *Session) error
+
+	// Agent setup functionality
+	AgentSetupStore
 }
 
 // SQLiteSessionStore implements Store using SQLite
 type SQLiteSessionStore struct {
-	db *sql.DB
+	db              *sql.DB
+	agentSetupStore AgentSetupStore
 }
 
 // NewSQLiteSessionStore creates a new SQLite session store
@@ -64,7 +68,11 @@ func NewSQLiteSessionStore(path string) (Store, error) {
 		return nil, err
 	}
 
-	return &SQLiteSessionStore{db: db}, nil
+	agentSetupStore := NewSQLiteAgentSetupStore(db)
+	return &SQLiteSessionStore{
+		db:              db,
+		agentSetupStore: agentSetupStore,
+	}, nil
 }
 
 // AddSession adds a new session to the store
@@ -294,4 +302,37 @@ func (s *SQLiteSessionStore) UpdateSession(ctx context.Context, session *Session
 // Close closes the database connection
 func (s *SQLiteSessionStore) Close() error {
 	return s.db.Close()
+}
+
+// Agent setup store delegation methods
+func (s *SQLiteSessionStore) CreateAgentSetup(ctx context.Context, setup *AgentSetup) (*AgentSetup, error) {
+	return s.agentSetupStore.CreateAgentSetup(ctx, setup)
+}
+
+func (s *SQLiteSessionStore) GetAgentSetup(ctx context.Context, id int) (*AgentSetup, error) {
+	return s.agentSetupStore.GetAgentSetup(ctx, id)
+}
+
+func (s *SQLiteSessionStore) GetAgentSetups(ctx context.Context) ([]*AgentSetup, error) {
+	return s.agentSetupStore.GetAgentSetups(ctx)
+}
+
+func (s *SQLiteSessionStore) UpdateAgentSetup(ctx context.Context, setup *AgentSetup) error {
+	return s.agentSetupStore.UpdateAgentSetup(ctx, setup)
+}
+
+func (s *SQLiteSessionStore) DeleteAgentSetup(ctx context.Context, id int) error {
+	return s.agentSetupStore.DeleteAgentSetup(ctx, id)
+}
+
+func (s *SQLiteSessionStore) AddCustomAgentPath(ctx context.Context, path *CustomAgentPath) (*CustomAgentPath, error) {
+	return s.agentSetupStore.AddCustomAgentPath(ctx, path)
+}
+
+func (s *SQLiteSessionStore) GetCustomAgentPaths(ctx context.Context) ([]*CustomAgentPath, error) {
+	return s.agentSetupStore.GetCustomAgentPaths(ctx)
+}
+
+func (s *SQLiteSessionStore) DeleteCustomAgentPath(ctx context.Context, id int) error {
+	return s.agentSetupStore.DeleteCustomAgentPath(ctx, id)
 }

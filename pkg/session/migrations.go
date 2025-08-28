@@ -186,6 +186,42 @@ func getAllMigrations() []Migration {
 			UpSQL:       `ALTER TABLE sessions ADD COLUMN cost REAL DEFAULT 0`,
 			DownSQL:     `ALTER TABLE sessions DROP COLUMN cost`,
 		},
+		{
+			ID:          6,
+			Name:        "006_create_agent_setups_table",
+			Description: "Create agent_setups table for storing agent configurations",
+			UpSQL: `CREATE TABLE IF NOT EXISTS agent_setups (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				name TEXT NOT NULL UNIQUE,
+				description TEXT,
+				agent_config_path TEXT NOT NULL,
+				working_directory TEXT NOT NULL,
+				environment_variables TEXT DEFAULT '{}',
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			)`,
+			DownSQL: `DROP TABLE agent_setups`,
+		},
+		{
+			ID:          7,
+			Name:        "007_create_custom_agent_paths_table",
+			Description: "Create custom_agent_paths table for storing user-imported agent directories",
+			UpSQL: `CREATE TABLE IF NOT EXISTS custom_agent_paths (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				path TEXT NOT NULL UNIQUE,
+				name TEXT NOT NULL,
+				description TEXT,
+				added_at TEXT NOT NULL
+			)`,
+			DownSQL: `DROP TABLE custom_agent_paths`,
+		},
+		{
+			ID:          8,
+			Name:        "008_add_agent_setup_to_sessions",
+			Description: "Add agent_setup_id column to sessions table to link sessions to agent setups",
+			UpSQL:       `ALTER TABLE sessions ADD COLUMN agent_setup_id INTEGER`,
+			DownSQL:     `ALTER TABLE sessions DROP COLUMN agent_setup_id`,
+		},
 		// Add more migrations here as needed
 	}
 }

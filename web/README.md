@@ -1,17 +1,24 @@
 # cagent Web UI
 
-## Dev quickstart
+## Development
 
-- Ensure the backend is running:
-  - Copy `.env.example` to `.env` in repo root and set:
-    - `CAGENT_MODELS_GATEWAY=https://gw.docker.com/models`
-  - Build the binary and start server pointing to the examples config directory:
-    - `task build && ./bin/cagent web ./examples/config`
-- Start the web dev server:
-  - `cd web && npm install && npm run dev`
-  - Open http://localhost:5173
+**⚠️ Always use the unified development command:**
 
-Vite is configured to proxy API calls from `/api` to `http://localhost:8080`.
+```bash
+# From the project root directory
+task web:dev
+```
+
+This single command:
+- Sets up environment (creates web/dist placeholder)
+- Installs npm dependencies automatically
+- Starts the Go backend server on :8080
+- Starts the Vite frontend dev server on :5173
+- Configures Vite to proxy `/api` calls to the backend
+
+Then open http://localhost:5173 in your browser.
+
+**Never start frontend and backend separately** - this causes confusion and connection issues.
 
 ## Production build
 

@@ -1,3 +1,5 @@
+import { AgentSetup, CustomAgentPath, DirectoryBrowseResponse } from '@/types'
+
 const API_BASE = '/api'
 
 export class ApiClient {
@@ -64,3 +66,24 @@ export class ApiClient {
 }
 
 export const apiClient = new ApiClient()
+
+// Agent setup API functions
+export const agentSetupApi = {
+  getAgentSetups: () => apiClient.get<AgentSetup[]>('/agent-setups'),
+  getAgentSetup: (id: number) => apiClient.get<AgentSetup>(`/agent-setups/${id}`),
+  createAgentSetup: (setup: AgentSetup) => apiClient.post<AgentSetup>('/agent-setups', setup),
+  updateAgentSetup: (id: number, setup: AgentSetup) => apiClient.put<AgentSetup>(`/agent-setups/${id}`, setup),
+  deleteAgentSetup: (id: number) => apiClient.delete(`/agent-setups/${id}`),
+}
+
+// Custom agent paths API functions
+export const customAgentPathApi = {
+  getCustomAgentPaths: () => apiClient.get<CustomAgentPath[]>('/custom-agent-paths'),
+  addCustomAgentPath: (path: CustomAgentPath) => apiClient.post<CustomAgentPath>('/custom-agent-paths', path),
+  deleteCustomAgentPath: (id: number) => apiClient.delete(`/custom-agent-paths/${id}`),
+}
+
+// Directory browsing API function
+export const directoryApi = {
+  browseDirectories: (path?: string) => apiClient.get<DirectoryBrowseResponse>(`/directories${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+}

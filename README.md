@@ -58,22 +58,36 @@ Here's what you need to know:
 ##### Build commands
 
 ```bash
-# Clone and build
+# Clone the repository
 git clone https://github.com/docker/cagent.git
 cd cagent
+
+# Set up environment (recommended: use Docker AI Gateway)
+cp .env.example .env
+echo "CAGENT_MODELS_GATEWAY=https://gw.docker.com/models" >> .env
+
+# Alternatively, set direct provider keys (NOT needed if using Docker AI Gateway)
+# export OPENAI_API_KEY=your_api_key_here
+# export ANTHROPIC_API_KEY=your_api_key_here
+# export GOOGLE_API_KEY=your_api_key_here
+```
+
+### Option 1: Web UI (Recommended)
+
+Start the development environment with both frontend and backend:
+
+```bash
+task web:dev
+```
+
+Then open http://localhost:5173 in your browser.
+
+### Option 2: Command Line
+
+Build and run from command line:
+
+```bash
 task build
-
-# If using the Docker AI Gateway, set this env var or use the `--models-gateway url_to_docker_ai_gateway` CLI flag
-export CAGENT_MODELS_GATEWAY=url_to_docker_ai_gateway
-
-# Alternatively, you to need set keys for remote inference services
-# Note that these are not needed if you are using Docker AI Gateway
-
-export OPENAI_API_KEY=your_api_key_here    # For OpenAI models
-export ANTHROPIC_API_KEY=your_api_key_here # For Anthopic models
-export GOOGLE_API_KEY=your_api_key_here    # For Gemini models
-
-# Run with a sample configuration
 ./bin/cagent run examples/config/code.yaml
 # or specify a different agent from the config
 ./bin/cagent run examples/config/code.yaml -a root

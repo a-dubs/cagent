@@ -103,3 +103,32 @@ export interface AppSettings {
   environmentVariables: Record<string, string>
   theme: 'light' | 'dark' | 'system'
 }
+
+export interface AgentSetup {
+  id?: number
+  name: string
+  description: string
+  agent_config_path: string
+  working_directory: string
+  environment_variables: Record<string, string>
+  created_at?: string
+  updated_at?: string
+}
+
+export interface CustomAgentPath {
+  id?: number
+  path: string
+  name: string
+  description: string
+  added_at?: string
+}
+
+export interface DirectoryEntry {
+  name: string
+  path: string
+}
+
+export interface DirectoryBrowseResponse {
+  path: string
+  directories: DirectoryEntry[]
+}

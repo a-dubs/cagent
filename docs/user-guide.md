@@ -66,6 +66,9 @@ agents with specialized capabilities and tools. It features:
    # Interactive CLI mode
    ./bin/cagent run examples/config/agent.yaml
 
+   # Or start the web interface (for development)
+   task web:dev
+
    # Or start as MCP server for external clients
    ./bin/cagent mcp server --agents-dir ./examples/config --port 8080
    ```
@@ -226,6 +229,11 @@ cagent provides multiple interfaces and deployment modes:
 $ ./bin/cagent run config.yaml
 $ ./bin/cagent run config.yaml -a agent_name  # Run specific agent
 $ ./bin/cagent run config.yaml --debug        # Enable debug logging
+
+# Web Interface (for development - use unified command)
+$ task web:dev
+# Production web server (after building)
+$ ./bin/cagent web ./config_directory
 
 # Terminal UI
 $ ./bin/cagent tui config.yaml
@@ -590,6 +598,11 @@ Enable debug logging for detailed information:
 ```bash
 # CLI mode
 ./bin/cagent run config.yaml --debug
+
+# Web interface (development)
+task web:dev
+# Web interface (production)
+./bin/cagent web ./config --debug
 
 # MCP server
 ./bin/cagent mcp server --agents-dir ./config --debug
