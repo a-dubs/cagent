@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ChatInterface } from '@/components/ChatInterface'
 import { SettingsDialog } from '@/components/SettingsDialog'
 import { Button } from '@/components/ui/button'
-import { Settings, FileText, Play, Square } from 'lucide-react'
+import { Settings, FileText, Play, Square, Plus } from 'lucide-react'
 
 import { Message, Session, PendingToolCall, CompletedToolCall, AgentSetup } from '@/types'
 import { apiClient } from '@/lib/api'
@@ -20,7 +20,7 @@ export function App() {
   const sseController = useRef<AbortController | null>(null)
 
   // Check if settings are configured
-  const isConfigured = currentAgentSetup !== null
+  const isConfigured = currentAgentSetup !== null && currentSession !== null
 
   useEffect(() => {
     // load chat sessions
@@ -66,9 +66,25 @@ export function App() {
     }
   }
 
-  const handleAgentSetupSelect = (setup: AgentSetup) => {
-    setCurrentAgentSetup(setup)
-    setSelectedAgent(setup.name) // Use setup name as agent reference
+  const handleAgentSetupSelect = async (setup: AgentSetup) => {
+    try {
+      // Create a new session
+      const newSession = await apiClient.post<Session>('/sessions')
+      setCurrentSession(newSession)
+      setCurrentAgentSetup(setup)
+      setSelectedAgent(setup.agent_config_path) // Use agent config path as agent reference
+      setMessages([]) // Clear any existing messages
+      setIsLoading(false)
+      setAgentRunning(false)
+      
+      // Reload sessions to include the new one
+      loadSessions()
+      
+      console.log('Started new session with agent setup:', setup.name)
+    } catch (error) {
+      console.error('Failed to create session for agent setup:', error)
+      alert('Failed to start new session. Please try again.')
+    }
   }
 
   const stopSession = async () => {
@@ -334,6 +350,18 @@ export function App() {
               >
                 <Square className="h-4 w-4" />
                 Stop Agent
+              </Button>
+            )}
+            
+            {/* New Chat Button */}
+            {isConfigured && (
+              <Button 
+                onClick={() => handleAgentSetupSelect(currentAgentSetup!)}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <Plus className="h-4 w-4" />
+                New Chat
               </Button>
             )}
             
