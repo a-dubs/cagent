@@ -1,31 +1,43 @@
 import { useEffect, useRef, useState } from 'react'
-import { ChatInterface } from '@/components/ChatInterface'
-import { SettingsDialog } from '@/components/SettingsDialog'
-import { Button } from '@/components/ui/button'
-import { Settings, FileText, Play, Square, Plus } from 'lucide-react'
-
 import { Message, Session, PendingToolCall, CompletedToolCall, AgentSetup } from '@/types'
-import { apiClient } from '@/lib/api'
-import { AgentSetupManager } from '@/components/AgentSetupManager'
-import { AgentConfigManager } from '@/components/AgentConfigManager'
+import { apiClient, agentSetupApi } from '@/lib/api'
+import { Layout } from '@/components/Layout'
+import { HomePage } from '@/components/pages/HomePage'
+import { AgentSetupsPage } from '@/components/pages/AgentSetupsPage'
+import { ConfigManagerPage } from '@/components/pages/ConfigManagerPage'
+import { ChatPage } from '@/components/pages/ChatPage'
+import { NewChatModal } from '@/components/NewChatModal'
 
 export function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [currentSession, setCurrentSession] = useState<Session | null>(null)
-  const [agentRunning, setAgentRunning] = useState(false)
+
   const [selectedAgent, setSelectedAgent] = useState<string>('')
   const [currentAgentSetup, setCurrentAgentSetup] = useState<AgentSetup | null>(null)
   const [sessions, setSessions] = useState<Session[]>([])
+  const [agentSetups, setAgentSetups] = useState<AgentSetup[]>([])
+  const [currentPage, setCurrentPage] = useState<string>('home')
+  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false)
   const sseController = useRef<AbortController | null>(null)
 
-  // Check if settings are configured
-  const isConfigured = currentAgentSetup !== null && currentSession !== null
+  // Check if we're in an active chat
+  const isInChat = currentAgentSetup !== null
 
   useEffect(() => {
-    // load chat sessions
+    // load chat sessions and agent setups
     loadSessions()
+    loadAgentSetups()
   }, [])
+
+  const loadAgentSetups = async () => {
+    try {
+      const data = await agentSetupApi.getAgentSetups()
+      setAgentSetups(data || [])
+    } catch (error) {
+      console.error('Failed to load agent setups:', error)
+    }
+  }
 
   const loadSessions = async () => {
     try {
@@ -36,23 +48,7 @@ export function App() {
     }
   }
 
-  const startNewSession = async () => {
-    try {
-      if (!isConfigured) {
-        alert('Please configure your agent setup first')
-        return
-      }
 
-      const session = await apiClient.post<Session>('/sessions')
-      setCurrentSession(session)
-      setMessages([])
-      setAgentRunning(true)
-      loadSessions() // Refresh session list
-    } catch (error) {
-      console.error('Failed to start session:', error)
-      alert('Failed to start agent session. Please check your configuration.')
-    }
-  }
 
   const loadSession = async (sessionId: string) => {
     try {
@@ -60,49 +56,67 @@ export function App() {
       setCurrentSession(session)
       // Convert session messages to Message format if needed
       setMessages([]) // Will need to implement message conversion
-      setAgentRunning(false)
+      setCurrentPage('chat')
     } catch (error) {
       console.error('Failed to load session:', error)
     }
   }
 
+  const handleNavigate = (page: string) => {
+    setCurrentPage(page)
+  }
+
+  const handleSessionSelect = (sessionId: string) => {
+    loadSession(sessionId)
+  }
+
+  const handleNewChat = () => {
+    setIsNewChatModalOpen(true)
+  }
+
   const handleAgentSetupSelect = async (setup: AgentSetup) => {
     try {
-      // Create a new session
-      const newSession = await apiClient.post<Session>('/sessions')
-      setCurrentSession(newSession)
+      // Don't create session immediately - just set up the chat state
+      setCurrentSession(null) // Clear any existing session
       setCurrentAgentSetup(setup)
       setSelectedAgent(setup.agent_config_path) // Use agent config path as agent reference
       setMessages([]) // Clear any existing messages
       setIsLoading(false)
-      setAgentRunning(false)
       
-      // Reload sessions to include the new one
-      loadSessions()
+      // Navigate to chat page
+      setCurrentPage('chat')
       
-      console.log('Started new session with agent setup:', setup.name)
+      console.log('Set up new chat with agent setup:', setup.name)
     } catch (error) {
-      console.error('Failed to create session for agent setup:', error)
-      alert('Failed to start new session. Please try again.')
+      console.error('Failed to set up new chat:', error)
+      alert('Failed to set up new chat. Please try again.')
     }
   }
 
-  const stopSession = async () => {
-    if (currentSession) {
-      try {
-        await apiClient.delete(`/sessions/${currentSession.id}`)
-        setCurrentSession(null)
-        setAgentRunning(false)
-      } catch (error) {
-        console.error('Failed to stop session:', error)
-      }
-    }
-  }
+
 
   const sendMessage = async (content: string) => {
-  if (!currentSession || !agentRunning || !selectedAgent) {
-      alert('No active session. Please start an agent session first.')
+    if (!currentAgentSetup || !selectedAgent) {
+      alert('No agent setup selected. Please select an agent setup first.')
       return
+    }
+
+    // Create session on first message if it doesn't exist
+    let sessionToUse = currentSession
+    if (!sessionToUse) {
+      try {
+        sessionToUse = await apiClient.post<Session>('/sessions')
+        setCurrentSession(sessionToUse)
+        
+        // Reload sessions to include the new one
+        loadSessions()
+        
+        console.log('Created session on first message:', sessionToUse.id)
+      } catch (error) {
+        console.error('Failed to create session:', error)
+        alert('Failed to create session. Please try again.')
+        return
+      }
     }
 
     const userMessage: Message = {
@@ -124,7 +138,7 @@ export function App() {
       const controller = new AbortController()
       sseController.current = controller
 
-      const stream = await apiClient.streamPost(`/sessions/${currentSession.id}/agent/${encodeURIComponent(selectedAgent)}`, body)
+      const stream = await apiClient.streamPost(`/sessions/${sessionToUse.id}/agent/${encodeURIComponent(selectedAgent)}`, body)
       const reader = stream.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
@@ -274,9 +288,12 @@ export function App() {
 
   // Send resume / confirmation to server: confirmation can be 'approve', 'approve-session', or 'reject'
   const sendConfirmation = async (confirmation: 'approve' | 'approve-session' | 'reject') => {
-    if (!currentSession) return
+    if (!currentSession) {
+      console.warn('No active session for confirmation')
+      return
+    }
     try {
-  await apiClient.post(`/sessions/${currentSession.id}/resume`, { confirmation })
+      await apiClient.post(`/sessions/${currentSession.id}/resume`, { confirmation })
     } catch (e) {
       console.error('Failed to send confirmation', e)
     }
@@ -316,132 +333,68 @@ export function App() {
     }
   }
 
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'home':
+        return (
+          <HomePage
+            recentSetups={agentSetups}
+            onSetupSelect={handleAgentSetupSelect}
+            onNavigateToSetups={() => setCurrentPage('setups')}
+            onNavigateToConfigs={() => setCurrentPage('configs')}
+          />
+        )
+      case 'setups':
+        return <AgentSetupsPage onSetupSelect={handleAgentSetupSelect} />
+      case 'configs':
+        return <ConfigManagerPage />
+      case 'chat':
+        return (
+          <ChatPage
+            messages={messages}
+            isLoading={isLoading}
+            currentAgentSetup={currentAgentSetup}
+            onSendMessage={sendMessage}
+            onConfirm={(c: 'approve' | 'approve-session' | 'reject') => sendConfirmation(c)}
+            onToolApprove={handleToolApproval}
+          />
+        )
+      default:
+        return (
+          <HomePage
+            recentSetups={agentSetups}
+            onSetupSelect={handleAgentSetupSelect}
+            onNavigateToSetups={() => setCurrentPage('setups')}
+            onNavigateToConfigs={() => setCurrentPage('configs')}
+          />
+        )
+    }
+  }
+
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="flex items-center justify-between p-4">
-          <div className="flex items-center gap-2">
-            <FileText className="h-6 w-6" />
-            <h1 className="text-xl font-semibold">cagent</h1>
-            {currentSession && (
-              <span className="text-sm text-muted-foreground">
-                • Session Active
-              </span>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            {/* Agent Control */}
-            {!agentRunning ? (
-              <Button 
-                onClick={startNewSession} 
-                disabled={!isConfigured}
-                className="flex items-center gap-2"
-              >
-                <Play className="h-4 w-4" />
-                Start Agent
-              </Button>
-            ) : (
-              <Button 
-                onClick={stopSession}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                <Square className="h-4 w-4" />
-                Stop Agent
-              </Button>
-            )}
-            
-            {/* New Chat Button */}
-            {isConfigured && (
-              <Button 
-                onClick={() => handleAgentSetupSelect(currentAgentSetup!)}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                New Chat
-              </Button>
-            )}
-            
-            <SettingsDialog>
-              <Button variant="outline" size="icon">
-                <Settings className="h-4 w-4" />
-              </Button>
-            </SettingsDialog>
-          </div>
-        </div>
+    <>
+      <Layout
+        currentPage={currentPage}
+        currentSessionId={currentSession?.id}
+        sessions={sessions}
+        onNavigate={handleNavigate}
+        onSessionSelect={handleSessionSelect}
+        onNewChat={handleNewChat}
+        showNewChatButton={isInChat}
+      >
+        {renderPage()}
+      </Layout>
 
-        {/* Status Bar */}
-        <div className="px-4 pb-2 text-sm text-muted-foreground">
-          <div className="flex items-center gap-4">
-            <span>Setup: {currentAgentSetup?.name || 'Not configured'}</span>
-            {currentAgentSetup && (
-              <>
-                <span>•</span>
-                <span>Working Dir: {currentAgentSetup.working_directory}</span>
-                <span>•</span>
-                <span>Env Vars: {Object.keys(currentAgentSetup.environment_variables).length}</span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex">
-        {!isConfigured ? (
-          <div className="flex-1 flex">
-            {/* Left sidebar - Agent Configuration & Setup Managers */}
-            <div className="w-1/3 border-r p-4 overflow-y-auto space-y-6">
-              <AgentConfigManager />
-              <AgentSetupManager onSetupSelect={handleAgentSetupSelect} />
-            </div>
-            
-            {/* Right side - Session History */}
-            <div className="flex-1 p-4">
-              <div className="text-center space-y-4">
-                <FileText className="h-16 w-16 mx-auto text-muted-foreground" />
-                <h2 className="text-2xl font-semibold">Welcome to cagent</h2>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  Select an agent setup from the left to get started, or create a new one.
-                </p>
-              </div>
-              
-              {sessions.length > 0 && (
-                <div className="mt-8">
-                  <h3 className="text-lg font-semibold mb-4">Recent Sessions</h3>
-                  <div className="space-y-2">
-                    {sessions.slice(0, 10).map((session) => (
-                      <div
-                        key={session.id}
-                        className="p-3 border rounded-lg cursor-pointer hover:bg-muted"
-                        onClick={() => loadSession(session.id)}
-                      >
-                        <div className="font-medium">{session.title || 'Untitled Session'}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {new Date(session.createdAt || '').toLocaleDateString()}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1">
-            <ChatInterface 
-              messages={messages}
-              onSendMessage={sendMessage}
-              isLoading={isLoading}
-              onConfirm={(c) => sendConfirmation(c)}
-              onToolApprove={handleToolApproval}
-            />
-          </div>
-        )}
-      </div>
-    </div>
+      <NewChatModal
+        isOpen={isNewChatModalOpen}
+        onClose={() => setIsNewChatModalOpen(false)}
+        agentSetups={agentSetups}
+        onSetupSelect={handleAgentSetupSelect}
+        onCreateSetup={() => {
+          setIsNewChatModalOpen(false)
+          setCurrentPage('setups')
+        }}
+      />
+    </>
   )
 }
