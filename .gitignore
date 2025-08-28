@@ -14,3 +14,14 @@ vendor
 # Local environment files
 .env.local
 .claude/settings.local.json
+
+# Web frontend dependencies and build outputs
+web/node_modules/
+web/.npmrc
+web/.vite/
+web/.env*
+
+# Development
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*

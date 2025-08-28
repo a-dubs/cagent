@@ -18,8 +18,22 @@ tasks:
   default:
     cmd: task --list
 
+  build-web:
+    desc: Build the web frontend
+    dir: web
+    cmds:
+      - npm run build
+    sources:
+      - "src/**/*"
+      - "package.json"
+      - "vite.config.ts"
+    generates:
+      - "dist/**/*"
+
   build:
     desc: Build the application binary
+    deps:
+      - build-web
     cmds:
       - mkdir -p {{.BUILD_DIR}}
       - go build -ldflags "{{.LDFLAGS}}" -o {{.BUILD_DIR}}/{{.BINARY_NAME}} {{.MAIN_PKG}}
@@ -28,6 +42,7 @@ tasks:
       - "**/*.txt"
       - "go.mod"
       - "go.sum"
+      - "web/dist/**/*"
     generates:
       - "{{.BUILD_DIR}}/{{.BINARY_NAME}}"
 
@@ -44,10 +59,13 @@ tasks:
 
   test:
     desc: Run tests
+    deps:
+      - build-web
     cmd: go test ./...
     sources:
       - "{{.GO_SOURCES}}"
       - "**/*.txt"
+      - "web/dist/**/*"
 
   build-image:
     desc: Build Docker image
