@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -137,11 +139,13 @@ func (c *Client) CreateChatCompletionStream(
 		"message_count", len(params.Messages))
 
 	if c.logger.Enabled(ctx, slog.LevelDebug) {
-		b, err := json.Marshal(params)
+		b, err := json.MarshalIndent(params, "", "  ")
 		if err != nil {
 			c.logger.Error("Failed to marshal Anthropic request", "error", err)
+		} else {
+			c.logger.Debug("Anthropic Request (JSON):")
+			fmt.Fprintf(os.Stderr, "%s\n", string(b))
 		}
-		c.logger.Debug("Request", "request", string(b))
 	}
 
 	// Build a fresh client per request when using the gateway

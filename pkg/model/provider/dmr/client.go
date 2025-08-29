@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/sashabaranov/go-openai"
 
@@ -235,8 +237,9 @@ func (c *Client) CreateChatCompletionStream(
 	}
 
 	// Log the request in JSON format for debugging
-	if requestJSON, err := json.Marshal(request); err == nil {
-		c.logger.Debug("DMR chat completion request", "request", string(requestJSON))
+	if requestJSON, err := json.MarshalIndent(request, "", "  "); err == nil {
+		c.logger.Debug("DMR Request (JSON):")
+		fmt.Fprintf(os.Stderr, "%s\n", string(requestJSON))
 	} else {
 		c.logger.Error("Failed to marshal DMR request to JSON", "error", err)
 	}

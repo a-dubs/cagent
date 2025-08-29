@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -252,7 +253,13 @@ func (g *StreamAdapter) Recv() (chat.MessageStreamResponse, error) {
 						Arguments: string(argsJSON),
 					},
 				}
-				g.logger.Debug("Gemini: Sending tool call", "name", fc.Name, "args", string(argsJSON), "id", toolID)
+				// Log with formatted JSON for better readability
+				if argsFormatted, err := json.MarshalIndent(fc.Args, "", "  "); err == nil {
+					g.logger.Debug("Gemini Tool Call Arguments:", "name", fc.Name, "id", toolID)
+					fmt.Fprintf(os.Stderr, "%s\n", string(argsFormatted))
+				} else {
+					g.logger.Debug("Gemini: Sending tool call", "name", fc.Name, "args", string(argsJSON), "id", toolID)
+				}
 			}
 		}
 	}
