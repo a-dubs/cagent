@@ -117,6 +117,17 @@ export interface Message {
   completedTools?: CompletedToolCall[]
   // UI-specific flag to indicate if this is a tool bubble
   isToolBubble?: boolean
+  // For merged shell tool calls
+  shellToolCall?: {
+    id: string
+    name: string
+    command: string
+    output?: string
+    isError?: boolean
+    status: 'pending' | 'executing' | 'completed' | 'error'
+    timestamp: string
+    duration?: number
+  }
 }
 
 export interface PendingToolCall {

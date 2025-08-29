@@ -4,7 +4,167 @@ import { Textarea } from '@/components/ui/textarea'
 import { Send, Bot, User, Terminal, Brain, Wrench, Search, FileText } from 'lucide-react'
 import { Message } from '@/types'
 import { ToolCallDisplay } from '@/components/ToolCallDisplay'
+import { ShellToolCallView } from '@/components/ShellToolCallView'
 import ReactMarkdown from 'react-markdown'
+
+// Interface for merged shell tool calls
+interface MergedShellToolCall {
+  id: string
+  name: string
+  command: string
+  output?: string
+  isError?: boolean
+  status: 'pending' | 'executing' | 'completed' | 'error'
+  timestamp: string
+  duration?: number
+}
+
+// Function to process messages and convert shell tool calls to use the shell component
+const processMessagesForShellTools = (messages: Message[]): Message[] => {
+  // First, build a map of tool outputs by tool call ID
+  const toolOutputs = new Map<string, string>()
+  
+  messages.forEach(message => {
+    if (message.toolCallID && message.toolOutput) {
+      toolOutputs.set(message.toolCallID, message.toolOutput)
+    }
+  })
+
+  return messages.map(message => {
+    // Check if this message has completed tools that are shell commands
+    if (message.completedTools && message.completedTools.length > 0) {
+      const shellTools: MergedShellToolCall[] = []
+      const nonShellTools: typeof message.completedTools = []
+
+      message.completedTools.forEach(tool => {
+        const isShellTool = tool.name === 'shell' || 
+                           tool.name === 'run_terminal_cmd' || 
+                           tool.name?.toLowerCase().includes('shell') ||
+                           tool.name?.toLowerCase().includes('terminal')
+
+        if (isShellTool) {
+          // Parse the command from args
+          let command = ''
+          try {
+            const parsedArgs = JSON.parse(tool.args || '{}')
+            command = parsedArgs.cmd || parsedArgs.command || tool.args || ''
+          } catch {
+            command = tool.args || ''
+          }
+
+          // Get output from the tool outputs map or the tool itself
+          const output = toolOutputs.get(tool.id) || tool.output
+
+          shellTools.push({
+            id: tool.id,
+            name: tool.name,
+            command: command,
+            output: output,
+            isError: false, // We don't have error info in CompletedToolCall
+            status: 'completed',
+            timestamp: tool.timestamp,
+            duration: tool.duration
+          })
+        } else {
+          nonShellTools.push(tool)
+        }
+      })
+
+      // If we found shell tools, create separate messages for them
+      if (shellTools.length > 0) {
+        const processedMessage = {
+          ...message,
+          completedTools: nonShellTools.length > 0 ? nonShellTools : undefined
+        }
+
+        // Return an array with the original message (minus shell tools) and shell tool messages
+        const shellMessages = shellTools.map(shellTool => ({
+          ...message,
+          id: `${message.id}-shell-${shellTool.id}`,
+          content: '',
+          completedTools: undefined,
+          pendingTools: undefined,
+          shellToolCall: shellTool
+        }))
+
+        // If there are non-shell tools or content, include the original message
+        if (nonShellTools.length > 0 || message.content) {
+          return [processedMessage, ...shellMessages]
+        } else {
+          return shellMessages
+        }
+      }
+    }
+
+    // Check pending tools as well
+    if (message.pendingTools && message.pendingTools.length > 0) {
+      const shellTools: MergedShellToolCall[] = []
+      const nonShellTools: typeof message.pendingTools = []
+
+      message.pendingTools.forEach(tool => {
+        const isShellTool = tool.name === 'shell' || 
+                           tool.name === 'run_terminal_cmd' || 
+                           tool.name?.toLowerCase().includes('shell') ||
+                           tool.name?.toLowerCase().includes('terminal')
+
+        if (isShellTool) {
+          // Parse the command from args
+          let command = ''
+          try {
+            const parsedArgs = JSON.parse(tool.args || '{}')
+            command = parsedArgs.cmd || parsedArgs.command || tool.args || ''
+          } catch {
+            command = tool.args || ''
+          }
+
+          shellTools.push({
+            id: tool.id,
+            name: tool.name,
+            command: command,
+            status: tool.status === 'pending_approval' ? 'pending' : 
+                   tool.status === 'approved' ? 'executing' : 'pending',
+            timestamp: tool.timestamp
+          })
+        } else {
+          nonShellTools.push(tool)
+        }
+      })
+
+      // If we found shell tools, create separate messages for them
+      if (shellTools.length > 0) {
+        const processedMessage = {
+          ...message,
+          pendingTools: nonShellTools.length > 0 ? nonShellTools : undefined
+        }
+
+        // Return an array with the original message (minus shell tools) and shell tool messages
+        const shellMessages = shellTools.map(shellTool => ({
+          ...message,
+          id: `${message.id}-shell-${shellTool.id}`,
+          content: '',
+          completedTools: undefined,
+          pendingTools: undefined,
+          shellToolCall: shellTool
+        }))
+
+        // If there are non-shell tools or content, include the original message
+        if (nonShellTools.length > 0 || message.content) {
+          return [processedMessage, ...shellMessages]
+        } else {
+          return shellMessages
+        }
+      }
+    }
+
+    return [message]
+  }).flat().filter(message => {
+    // Filter out tool response messages that we've already merged into shell tools
+    if (message.toolCallID && message.tool?.name === 'shell') {
+      return false
+    }
+    return true
+  })
+}
 
 interface ChatInterfaceProps {
   messages: Message[]
@@ -21,6 +181,9 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Process messages to convert shell tool calls to use shell component
+  const processedMessages = processMessagesForShellTools(messages)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -78,14 +241,14 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
     <div className="flex flex-col h-full bg-background">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 max-h-full">
-        {messages.length === 0 && (
+        {processedMessages.length === 0 && (
           <div className="text-center text-muted-foreground py-8">
             <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>Start a conversation with your agent</p>
           </div>
         )}
         
-          {messages.filter(message => {
+          {processedMessages.filter(message => {
           // Filter out tool messages since we handle them separately
           if (message.role === 'tool') return false
           return true
@@ -170,6 +333,16 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
                 const contentStr = Array.isArray(message.content)
                   ? message.content.join('\n')
                   : message.content
+
+                // Handle shell tool calls with special rendering
+                if (message.shellToolCall) {
+                  return (
+                    <ShellToolCallView 
+                      toolCall={message.shellToolCall}
+                      onApprove={onToolApprove}
+                    />
+                  )
+                }
 
                 if (message.role === 'assistant') {
                   // If this is a tool bubble, show only the tool call
