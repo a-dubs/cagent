@@ -47,7 +47,7 @@ export function ToolCallDisplay({ pendingTools = [], completedTools = [], onAppr
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <div className="text-xs font-medium text-muted-foreground mb-1">Tool Calls</div>
       
       {/* Pending Tools */}
@@ -73,7 +73,7 @@ export function ToolCallDisplay({ pendingTools = [], completedTools = [], onAppr
             </div>
             
             {isExpanded && (
-              <div className="px-2 pb-2 space-y-2 border-t border-border/20">
+              <div className="px-2 pb-2 space-y-1 border-t border-border/20">
                 {tool.args && (
                   <div>
                     <div className="text-xs font-medium text-muted-foreground mb-1">Arguments:</div>
@@ -140,7 +140,7 @@ export function ToolCallDisplay({ pendingTools = [], completedTools = [], onAppr
             </div>
             
             {isExpanded && (
-              <div className="px-2 pb-2 space-y-2 border-t border-border/20">
+              <div className="px-2 pb-2 space-y-1 border-t border-border/20">
                 {tool.args && (
                   <div>
                     <div className="text-xs font-medium text-muted-foreground mb-1">Arguments:</div>

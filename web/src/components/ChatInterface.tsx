@@ -165,7 +165,7 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
                     // This is the final response bubble, show only content
                     if (contentStr && contentStr.trim()) {
                       return (
-                        <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
+                        <div className="prose prose-sm max-w-none dark:prose-invert chat-message-prose">
                           <ReactMarkdown>{contentStr}</ReactMarkdown>
                         </div>
                       )
