@@ -143,7 +143,7 @@
   .chat-message-prose code {
     padding: 0.075rem 0.25rem; /* ~1px 4px */
     border-radius: 0.25rem; /* 4px */
-    background-color: hsl(var(--muted) / 0.5);
+    background-color: #fffa;
   }
   .chat-message-prose pre code {
     background-color: transparent;

@@ -128,13 +128,22 @@ export function Layout({
                 <span className="text-sm font-medium text-muted-foreground">Recent Chats</span>
               </div>
               
-              {sessions.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-center py-4">
-                  No chat sessions yet
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  {sessions.map((session) => (
+              {(() => {
+                const activeSessions = sessions.filter((session) => {
+                  // Filter out sessions that are likely empty
+                  // Keep sessions that have an updatedAt different from createdAt (indicating activity)
+                  // or have a non-default title
+                  return session.updatedAt !== session.createdAt || 
+                         (session.title && session.title !== 'Untitled Chat');
+                });
+                
+                return activeSessions.length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-4">
+                    No chat sessions yet
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {activeSessions.map((session) => (
                     <Button
                       key={session.id}
                       variant={currentSessionId === session.id ? "secondary" : "ghost"}
@@ -150,9 +159,10 @@ export function Layout({
                         </div>
                       </div>
                     </Button>
-                  ))}
-                </div>
-              )}
+                                      ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
           

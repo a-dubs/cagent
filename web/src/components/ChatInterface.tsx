@@ -17,6 +17,7 @@ interface ChatInterfaceProps {
 export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, onToolApprove }: ChatInterfaceProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -31,8 +32,28 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
     if (input.trim() && !isLoading) {
       onSendMessage(input.trim())
       setInput('')
+      resetTextareaHeight()
     }
   }
+
+  const resetTextareaHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '60px'
+    }
+  }
+
+  const adjustTextareaHeight = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '60px'
+      const scrollHeight = textareaRef.current.scrollHeight
+      const maxHeight = 200 // max-h-[200px] = 200px
+      textareaRef.current.style.height = Math.min(scrollHeight, maxHeight) + 'px'
+    }
+  }
+
+  useEffect(() => {
+    adjustTextareaHeight()
+  }, [input])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -72,7 +93,7 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
             
             // Add pending tool calls as separate bubbles
             if (message.pendingTools && message.pendingTools.length > 0) {
-              message.pendingTools.forEach((tool, index) => {
+              message.pendingTools.forEach((tool) => {
                 bubbles.push({
                   ...message,
                   id: `${message.id}-pending-${tool.id}`,
@@ -86,7 +107,7 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
             
             // Add completed tool calls as separate bubbles
             if (message.completedTools && message.completedTools.length > 0) {
-              message.completedTools.forEach((tool, index) => {
+              message.completedTools.forEach((tool) => {
                 bubbles.push({
                   ...message,
                   id: `${message.id}-completed-${tool.id}`,
@@ -258,12 +279,14 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
       <div className="border-t bg-background p-4 flex-shrink-0">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <Textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Type your message... (Shift+Enter for new line)"
-            className="min-h-[60px] max-h-[200px] resize-none"
+            className="min-h-[60px] max-h-[200px] resize-none overflow-hidden"
             disabled={isLoading}
+            style={{ height: '60px' }}
           />
           <Button type="submit" disabled={!input.trim() || isLoading} size="icon" className="self-end">
             <Send className="h-4 w-4" />
