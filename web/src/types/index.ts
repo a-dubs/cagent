@@ -128,6 +128,19 @@ export interface Message {
     timestamp: string
     duration?: number
   }
+  // For think tool calls
+  thinkToolCall?: {
+    id: string
+    name: string
+    thought: string
+    thinking: {
+      summary: string
+      full: string
+    }
+    status: 'pending' | 'executing' | 'completed'
+    timestamp: string
+    duration?: number
+  }
 }
 
 export interface PendingToolCall {
