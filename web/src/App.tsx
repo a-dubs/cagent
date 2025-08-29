@@ -7,6 +7,7 @@ import { AgentSetupsPage } from '@/components/pages/AgentSetupsPage'
 import { ConfigManagerPage } from '@/components/pages/ConfigManagerPage'
 import { ChatPage } from '@/components/pages/ChatPage'
 import { NewChatModal } from '@/components/NewChatModal'
+import { AgentMismatchWarningModal } from '@/components/AgentMismatchWarningModal'
 
 export function App() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -19,6 +20,12 @@ export function App() {
   const [agentSetups, setAgentSetups] = useState<AgentSetup[]>([])
   const [currentPage, setCurrentPage] = useState<string>('home')
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false)
+  const [isAgentMismatchWarningOpen, setIsAgentMismatchWarningOpen] = useState(false)
+  const [pendingFallbackSession, setPendingFallbackSession] = useState<{
+    sessionResponse: SessionResponse
+    session: Session
+    fallbackSetup: AgentSetup
+  } | null>(null)
   const sseController = useRef<AbortController | null>(null)
 
   // Check if we're in an active chat
@@ -104,6 +111,11 @@ export function App() {
     try {
       const sessionResponse = await apiClient.get<SessionResponse>(`/sessions/${sessionId}`)
       
+      // Get the agent filename from the original session list (more reliable)
+      const originalSession = sessions.find(s => s.id === sessionId)
+      const agentFilename = originalSession?.most_recent_agent_filename || 
+        (sessionResponse.messages.length > 0 ? sessionResponse.messages[sessionResponse.messages.length - 1].agentFilename : '')
+      
       // Convert to Session format for state
       const session: Session = {
         id: sessionResponse.id,
@@ -112,23 +124,25 @@ export function App() {
         num_messages: sessionResponse.messages.length,
         input_tokens: sessionResponse.input_tokens,
         output_tokens: sessionResponse.output_tokens,
-        most_recent_agent_filename: sessionResponse.messages.length > 0 ? sessionResponse.messages[sessionResponse.messages.length - 1].agentFilename : '',
+        most_recent_agent_filename: agentFilename,
         createdAt: sessionResponse.created_at,
         updatedAt: sessionResponse.updated_at,
         agentName: sessionResponse.messages.length > 0 ? sessionResponse.messages[0].agentName : undefined
       }
       
-      setCurrentSession(session)
+      console.log('Loading session with agent filename:', agentFilename)
       
-      // Convert and set messages
+      // Load session and messages but don't auto-start the agent
+      setCurrentSession(session)
       const convertedMessages = convertSessionMessagesToMessages(sessionResponse.messages)
       setMessages(convertedMessages)
       
-      // Clear current agent setup since we're loading an existing session
+      // Clear agent setup - user will need to manually start the session
       setCurrentAgentSetup(null)
       setSelectedAgent('')
-      
       setCurrentPage('chat')
+      
+      console.log('Loaded session:', session.title)
     } catch (error) {
       console.error('Failed to load session:', error)
       alert('Failed to load chat session. Please try again.')
@@ -214,6 +228,83 @@ export function App() {
     } catch (error) {
       console.error('Failed to set up new chat:', error)
       alert('Failed to set up new chat. Please try again.')
+    }
+  }
+
+  const handleAgentMismatchWarningClose = () => {
+    setIsAgentMismatchWarningOpen(false)
+    setPendingFallbackSession(null)
+  }
+
+  const handleAgentMismatchWarningProceed = () => {
+    if (pendingFallbackSession) {
+      const { sessionResponse, session, fallbackSetup } = pendingFallbackSession
+      
+      // Proceed with the fallback setup
+      setCurrentSession(session)
+      const convertedMessages = convertSessionMessagesToMessages(sessionResponse.messages)
+      setMessages(convertedMessages)
+      setCurrentAgentSetup(fallbackSetup)
+      setSelectedAgent(fallbackSetup.agent_config_path)
+      setCurrentPage('chat')
+      
+      console.log('Proceeded with fallback agent setup:', fallbackSetup.name)
+    }
+    
+    setIsAgentMismatchWarningOpen(false)
+    setPendingFallbackSession(null)
+  }
+
+  const handleStartSession = () => {
+    if (!currentSession) {
+      console.error('No session available to start')
+      return
+    }
+
+    const agentFilename = currentSession.most_recent_agent_filename
+    if (!agentFilename) {
+      alert('This session has no associated agent configuration.')
+      return
+    }
+
+    // Find matching agent setup
+    const matchingSetup = agentSetups.find(setup => 
+      setup.agent_config_path === agentFilename || 
+      setup.agent_config_path.endsWith(`/${agentFilename}`) ||
+      setup.agent_config_path.endsWith(`/${agentFilename}.yaml`) ||
+      setup.agent_config_path.endsWith(`/${agentFilename}.yml`)
+    )
+    
+    if (matchingSetup) {
+      // Exact match found - start with proper setup
+      setCurrentAgentSetup(matchingSetup)
+      setSelectedAgent(matchingSetup.agent_config_path)
+      console.log('Started session with agent setup:', matchingSetup.name)
+    } else {
+      // No matching setup found - show warning modal
+      const fallbackSetup: AgentSetup = {
+        name: agentFilename.replace(/\.ya?ml$/i, '').replace(/[_-]/g, ' '),
+        description: 'Temporary fallback agent setup',
+        agent_config_path: agentFilename,
+        working_directory: '~',
+        environment_variables: {}
+      }
+      
+      setPendingFallbackSession({
+        sessionResponse: {
+          id: currentSession.id,
+          title: currentSession.title,
+          messages: [], // We already have messages loaded
+          created_at: currentSession.created_at,
+          updated_at: currentSession.updatedAt,
+          tools_approved: false,
+          input_tokens: currentSession.input_tokens,
+          output_tokens: currentSession.output_tokens
+        },
+        session: currentSession,
+        fallbackSetup
+      })
+      setIsAgentMismatchWarningOpen(true)
     }
   }
 
@@ -478,9 +569,11 @@ export function App() {
             messages={messages}
             isLoading={isLoading}
             currentAgentSetup={currentAgentSetup}
+            currentSession={currentSession}
             onSendMessage={sendMessage}
             onConfirm={(c: 'approve' | 'approve-session' | 'reject') => sendConfirmation(c)}
             onToolApprove={handleToolApproval}
+            onStartSession={handleStartSession}
           />
         )
       default:
@@ -522,6 +615,15 @@ export function App() {
           setIsNewChatModalOpen(false)
           setCurrentPage('setups')
         }}
+      />
+
+      <AgentMismatchWarningModal
+        isOpen={isAgentMismatchWarningOpen}
+        onClose={handleAgentMismatchWarningClose}
+        onProceed={handleAgentMismatchWarningProceed}
+        sessionTitle={pendingFallbackSession?.session.title || ''}
+        agentFilename={pendingFallbackSession?.session.most_recent_agent_filename || ''}
+        fallbackSetupName={pendingFallbackSession?.fallbackSetup.name || ''}
       />
     </>
   )

@@ -6,6 +6,7 @@ evals
 *.db
 /cagent
 .crush
+build/
 
 # agents
 agent.yaml
@@ -25,3 +26,7 @@ web/.env*
 web/npm-debug.log*
 web/yarn-debug.log*
 web/yarn-error.log*
+
+# web stuffs
+server.log
+web.log

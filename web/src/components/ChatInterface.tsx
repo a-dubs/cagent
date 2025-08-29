@@ -12,9 +12,12 @@ interface ChatInterfaceProps {
   isLoading: boolean
   onConfirm?: (confirmation: 'approve' | 'approve-session' | 'reject') => void
   onToolApprove?: (toolId: string, approval: 'approve' | 'approve-session' | 'reject') => void
+  showStartSession?: boolean
+  onStartSession?: () => void
+  agentFilename?: string
 }
 
-export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, onToolApprove }: ChatInterfaceProps) {
+export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, onToolApprove, showStartSession, onStartSession, agentFilename }: ChatInterfaceProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -274,6 +277,28 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
         
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Start Session Button */}
+      {showStartSession && (
+        <div className="flex justify-center py-4 border-t border-b bg-muted/30">
+          <div className="text-center space-y-3">
+            <div className="text-sm text-muted-foreground">
+              This session needs to be started to continue chatting
+            </div>
+            <Button 
+              onClick={onStartSession}
+              className="gap-2"
+              size="lg"
+            >
+              <Bot className="h-4 w-4" />
+              Start Session
+              {agentFilename && (
+                <span className="text-xs opacity-75">({agentFilename})</span>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Input */}
       <div className="border-t bg-background p-4 flex-shrink-0">

@@ -1,23 +1,27 @@
 
 import { ChatInterface } from '@/components/ChatInterface'
-import { Message, AgentSetup } from '@/types'
+import { Message, AgentSetup, Session } from '@/types'
 
 interface ChatPageProps {
   messages: Message[]
   isLoading: boolean
   currentAgentSetup: AgentSetup | null
+  currentSession: Session | null
   onSendMessage: (content: string) => void
   onConfirm: (confirmation: 'approve' | 'approve-session' | 'reject') => void
   onToolApprove: (toolCallId: string, approval: 'approve' | 'approve-session' | 'reject') => void
+  onStartSession?: () => void
 }
 
 export function ChatPage({
   messages,
   isLoading,
   currentAgentSetup,
+  currentSession,
   onSendMessage,
   onConfirm,
-  onToolApprove
+  onToolApprove,
+  onStartSession
 }: ChatPageProps) {
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -53,6 +57,9 @@ export function ChatPage({
           isLoading={isLoading}
           onConfirm={onConfirm}
           onToolApprove={(toolCallId) => onToolApprove(toolCallId, 'approve')}
+          showStartSession={!!(currentSession && !currentAgentSetup)}
+          onStartSession={onStartSession}
+          agentFilename={currentSession?.most_recent_agent_filename}
         />
       </div>
     </div>
