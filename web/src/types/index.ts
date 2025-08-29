@@ -42,6 +42,8 @@ export interface Session {
   createdAt?: string
   updatedAt?: string
   agentName?: string
+  // Frontend-only fields
+  isFavorite?: boolean
 }
 
 // Backend session response with messages

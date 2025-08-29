@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Message, Session, SessionResponse, SessionMessage, PendingToolCall, CompletedToolCall, AgentSetup } from '@/types'
-import { apiClient, agentSetupApi } from '@/lib/api'
+import { apiClient, agentSetupApi, sessionApi } from '@/lib/api'
 import { Layout } from '@/components/Layout'
 import { HomePage } from '@/components/pages/HomePage'
 import { AgentSetupsPage } from '@/components/pages/AgentSetupsPage'
@@ -87,7 +87,12 @@ export function App() {
   const loadSessions = async () => {
     try {
       const data = await apiClient.get<Session[]>('/sessions')
-      setSessions(data)
+      // Add favorite status from localStorage
+      const sessionsWithFavorites = data.map(session => ({
+        ...session,
+        isFavorite: localStorage.getItem(`favorite-session-${session.id}`) === 'true'
+      }))
+      setSessions(sessionsWithFavorites)
     } catch (error) {
       console.error('Failed to load sessions:', error)
     }
@@ -123,6 +128,57 @@ export function App() {
       console.error('Failed to load session:', error)
       alert('Failed to load chat session. Please try again.')
     }
+  }
+
+  const handleSessionRename = async (sessionId: string, newTitle: string) => {
+    try {
+      await sessionApi.updateSessionTitle(sessionId, newTitle)
+      // Update local state
+      setSessions(prev => prev.map(session => 
+        session.id === sessionId ? { ...session, title: newTitle } : session
+      ))
+    } catch (error) {
+      console.error('Failed to rename session:', error)
+      alert('Failed to rename chat session. Please try again.')
+    }
+  }
+
+  const handleSessionDelete = async (sessionId: string) => {
+    if (!confirm('Are you sure you want to delete this chat session? This action cannot be undone.')) {
+      return
+    }
+    
+    try {
+      await sessionApi.deleteSession(sessionId)
+      // Remove from local state
+      setSessions(prev => prev.filter(session => session.id !== sessionId))
+      
+      // If this was the current session, navigate away
+      if (currentSession?.id === sessionId) {
+        setCurrentSession(null)
+        setMessages([])
+        setCurrentPage('home')
+      }
+    } catch (error) {
+      console.error('Failed to delete session:', error)
+      alert('Failed to delete chat session. Please try again.')
+    }
+  }
+
+  const handleSessionToggleFavorite = (sessionId: string) => {
+    setSessions(prev => prev.map(session => {
+      if (session.id === sessionId) {
+        const newFavoriteStatus = !session.isFavorite
+        // Update localStorage
+        if (newFavoriteStatus) {
+          localStorage.setItem(`favorite-session-${sessionId}`, 'true')
+        } else {
+          localStorage.removeItem(`favorite-session-${sessionId}`)
+        }
+        return { ...session, isFavorite: newFavoriteStatus }
+      }
+      return session
+    }))
   }
 
   const handleNavigate = (page: string) => {
@@ -440,9 +496,13 @@ export function App() {
         currentPage={currentPage}
         currentSessionId={currentSession?.id}
         sessions={sessions}
+        agentSetups={agentSetups}
         onNavigate={handleNavigate}
         onSessionSelect={handleSessionSelect}
         onNewChat={handleNewChat}
+        onSessionRename={handleSessionRename}
+        onSessionDelete={handleSessionDelete}
+        onSessionToggleFavorite={handleSessionToggleFavorite}
         showNewChatButton={isInChat}
       >
         {renderPage()}

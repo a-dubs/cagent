@@ -87,3 +87,11 @@ export const customAgentPathApi = {
 export const directoryApi = {
   browseDirectories: (path?: string) => apiClient.get<DirectoryBrowseResponse>(`/directories${path ? `?path=${encodeURIComponent(path)}` : ''}`),
 }
+
+// Session management API functions
+export const sessionApi = {
+  updateSessionTitle: (sessionId: string, title: string) => 
+    apiClient.put(`/sessions/${sessionId}`, { title }),
+  deleteSession: (sessionId: string) => 
+    apiClient.delete(`/sessions/${sessionId}`),
+}
