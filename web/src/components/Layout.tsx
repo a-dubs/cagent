@@ -165,7 +165,7 @@ export function Layout({
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col min-h-0">
           {children}
         </div>
       </div>

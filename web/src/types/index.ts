@@ -37,6 +37,45 @@ export interface Session {
   updatedAt?: string
 }
 
+// Backend session response with messages
+export interface SessionResponse {
+  id: string
+  title: string
+  messages: SessionMessage[]
+  created_at: string
+  tools_approved: boolean
+  input_tokens: number
+  output_tokens: number
+}
+
+// Backend session message format
+export interface SessionMessage {
+  agentFilename: string
+  agentName: string
+  message: {
+    role: 'user' | 'assistant' | 'tool' | 'system'
+    content: string
+    refusal?: string
+    multi_content?: any[]
+    name?: string
+    reasoning_content?: string
+    function_call?: {
+      name: string
+      arguments: string
+    }
+    tool_calls?: {
+      index?: number
+      id: string
+      type: string
+      function: {
+        name: string
+        arguments: string
+      }
+    }[]
+    tool_call_id?: string
+  }
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant' | 'tool' | 'system'
@@ -66,6 +105,8 @@ export interface Message {
   // Enhanced tool call tracking
   pendingTools?: PendingToolCall[]
   completedTools?: CompletedToolCall[]
+  // UI-specific flag to indicate if this is a tool bubble
+  isToolBubble?: boolean
 }
 
 export interface PendingToolCall {

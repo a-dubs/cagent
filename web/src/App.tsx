@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Message, Session, PendingToolCall, CompletedToolCall, AgentSetup } from '@/types'
+import { Message, Session, SessionResponse, SessionMessage, PendingToolCall, CompletedToolCall, AgentSetup } from '@/types'
 import { apiClient, agentSetupApi } from '@/lib/api'
 import { Layout } from '@/components/Layout'
 import { HomePage } from '@/components/pages/HomePage'
@@ -23,6 +23,51 @@ export function App() {
 
   // Check if we're in an active chat
   const isInChat = currentAgentSetup !== null
+
+  // Convert backend session messages to frontend Message format
+  const convertSessionMessagesToMessages = (sessionMessages: SessionMessage[]): Message[] => {
+    return sessionMessages.map((sessionMsg, index) => {
+      const message: Message = {
+        id: `session-${index}`,
+        role: sessionMsg.message.role,
+        content: sessionMsg.message.content,
+        timestamp: new Date().toISOString(), // Backend doesn't provide timestamps for individual messages
+      }
+
+      // Convert tool calls if present
+      if (sessionMsg.message.tool_calls && sessionMsg.message.tool_calls.length > 0) {
+        message.toolCalls = sessionMsg.message.tool_calls.map(tc => ({
+          id: tc.id,
+          type: tc.type,
+          function: {
+            name: tc.function.name,
+            arguments: tc.function.arguments
+          }
+        }))
+
+        // Convert to completed tools for display
+        message.completedTools = sessionMsg.message.tool_calls.map(tc => ({
+          id: tc.id,
+          name: tc.function.name,
+          args: tc.function.arguments,
+          timestamp: new Date().toISOString(),
+          // We don't have output or duration from stored messages
+        }))
+      }
+
+      // Handle tool responses (messages with tool_call_id)
+      if (sessionMsg.message.tool_call_id) {
+        message.toolCallID = sessionMsg.message.tool_call_id
+        message.toolOutput = sessionMsg.message.content
+        message.tool = {
+          name: sessionMsg.message.name || 'Tool',
+          args: ''
+        }
+      }
+
+      return message
+    })
+  }
 
   useEffect(() => {
     // load chat sessions and agent setups
@@ -52,13 +97,29 @@ export function App() {
 
   const loadSession = async (sessionId: string) => {
     try {
-      const session = await apiClient.get<Session>(`/sessions/${sessionId}`)
+      const sessionResponse = await apiClient.get<SessionResponse>(`/sessions/${sessionId}`)
+      
+      // Convert to Session format for state
+      const session: Session = {
+        id: sessionResponse.id,
+        title: sessionResponse.title,
+        createdAt: sessionResponse.created_at
+      }
+      
       setCurrentSession(session)
-      // Convert session messages to Message format if needed
-      setMessages([]) // Will need to implement message conversion
+      
+      // Convert and set messages
+      const convertedMessages = convertSessionMessagesToMessages(sessionResponse.messages)
+      setMessages(convertedMessages)
+      
+      // Clear current agent setup since we're loading an existing session
+      setCurrentAgentSetup(null)
+      setSelectedAgent('')
+      
       setCurrentPage('chat')
     } catch (error) {
       console.error('Failed to load session:', error)
+      alert('Failed to load chat session. Please try again.')
     }
   }
 

@@ -53,7 +53,7 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
   return (
     <div className="flex flex-col h-full bg-background">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 max-h-full">
         {messages.length === 0 && (
           <div className="text-center text-muted-foreground py-8">
             <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -62,16 +62,58 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
         )}
         
           {messages.filter(message => {
-          // Filter out tool messages since we handle them in assistant messages
+          // Filter out tool messages since we handle them separately
           if (message.role === 'tool') return false
-          // Filter out empty assistant messages  
-          if (message.role === 'assistant') {
-            const hasContent = message.content && typeof message.content === 'string' && message.content.trim()
-            const hasTools = (message.pendingTools && message.pendingTools.length > 0) || 
-                            (message.completedTools && message.completedTools.length > 0)
-            return hasContent || hasTools
-          }
           return true
+        }).flatMap((message) => {
+          // For assistant messages, create separate bubbles for tool calls and content
+          if (message.role === 'assistant') {
+            const bubbles = []
+            
+            // Add pending tool calls as separate bubbles
+            if (message.pendingTools && message.pendingTools.length > 0) {
+              message.pendingTools.forEach((tool, index) => {
+                bubbles.push({
+                  ...message,
+                  id: `${message.id}-pending-${tool.id}`,
+                  content: '',
+                  pendingTools: [tool],
+                  completedTools: [],
+                  isToolBubble: true
+                })
+              })
+            }
+            
+            // Add completed tool calls as separate bubbles
+            if (message.completedTools && message.completedTools.length > 0) {
+              message.completedTools.forEach((tool, index) => {
+                bubbles.push({
+                  ...message,
+                  id: `${message.id}-completed-${tool.id}`,
+                  content: '',
+                  pendingTools: [],
+                  completedTools: [tool],
+                  isToolBubble: true
+                })
+              })
+            }
+            
+            // Add final response bubble if there's content
+            const contentStr = Array.isArray(message.content) ? message.content.join('\n') : message.content
+            if (contentStr && contentStr.trim()) {
+              bubbles.push({
+                ...message,
+                id: `${message.id}-content`,
+                pendingTools: [],
+                completedTools: [],
+                isToolBubble: false
+              })
+            }
+            
+            return bubbles.length > 0 ? bubbles : [message]
+          }
+          
+          return [message]
         }).map((message) => (
           <div
             key={message.id}
@@ -95,6 +137,8 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
               className={`max-w-[70%] rounded-lg px-3 py-2 ${
                 message.role === 'user'
                   ? 'bg-primary text-primary-foreground'
+                  : message.isToolBubble
+                  ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800'
                   : 'bg-muted text-muted-foreground'
               }`}
             >
@@ -104,26 +148,29 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
                   : message.content
 
                 if (message.role === 'assistant') {
-                  const hasTools = (message.pendingTools && message.pendingTools.length > 0) || 
-                                   (message.completedTools && message.completedTools.length > 0)
-                  return (
-                    <div className="space-y-2">
-                      {/* Show tool calls first if there are any */}
-                      {hasTools && (
+                  // If this is a tool bubble, show only the tool call
+                  if (message.isToolBubble) {
+                    const hasTools = (message.pendingTools && message.pendingTools.length > 0) || 
+                                     (message.completedTools && message.completedTools.length > 0)
+                    if (hasTools) {
+                      return (
                         <ToolCallDisplay 
                           pendingTools={message.pendingTools}
                           completedTools={message.completedTools}
                           onApprove={onToolApprove}
                         />
-                      )}
-                      {/* Show content only if there's actual text content */}
-                      {contentStr && contentStr.trim() && (
+                      )
+                    }
+                  } else {
+                    // This is the final response bubble, show only content
+                    if (contentStr && contentStr.trim()) {
+                      return (
                         <div className="prose prose-sm max-w-none dark:prose-invert whitespace-pre-wrap">
                           <ReactMarkdown>{contentStr}</ReactMarkdown>
                         </div>
-                      )}
-                    </div>
-                  )
+                      )
+                    }
+                  }
                 }
                 if (message.role === 'tool') {
                   return (
@@ -208,7 +255,7 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
       </div>
 
       {/* Input */}
-      <div className="border-t bg-background p-4">
+      <div className="border-t bg-background p-4 flex-shrink-0">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <Textarea
             value={input}

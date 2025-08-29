@@ -20,9 +20,9 @@ export function ChatPage({
   onToolApprove
 }: ChatPageProps) {
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
       {/* Chat Header */}
-      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0">
         <div className="px-6 py-3">
           <div className="flex items-center gap-4">
             <div>
@@ -46,13 +46,13 @@ export function ChatPage({
       </div>
 
       {/* Chat Interface */}
-      <div className="flex-1">
+      <div className="flex-1 min-h-0">
         <ChatInterface 
           messages={messages}
           onSendMessage={onSendMessage}
           isLoading={isLoading}
           onConfirm={onConfirm}
-                        onToolApprove={(toolCallId) => onToolApprove(toolCallId, 'approve')}
+          onToolApprove={(toolCallId) => onToolApprove(toolCallId, 'approve')}
         />
       </div>
     </div>
