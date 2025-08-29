@@ -108,6 +108,11 @@ export function App() {
       const session: Session = {
         id: sessionResponse.id,
         title: sessionResponse.title,
+        created_at: sessionResponse.created_at,
+        num_messages: sessionResponse.messages.length,
+        input_tokens: sessionResponse.input_tokens,
+        output_tokens: sessionResponse.output_tokens,
+        most_recent_agent_filename: sessionResponse.messages.length > 0 ? sessionResponse.messages[sessionResponse.messages.length - 1].agentFilename : '',
         createdAt: sessionResponse.created_at,
         updatedAt: sessionResponse.updated_at,
         agentName: sessionResponse.messages.length > 0 ? sessionResponse.messages[0].agentName : undefined
