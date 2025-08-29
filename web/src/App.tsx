@@ -103,7 +103,9 @@ export function App() {
       const session: Session = {
         id: sessionResponse.id,
         title: sessionResponse.title,
-        createdAt: sessionResponse.created_at
+        createdAt: sessionResponse.created_at,
+        updatedAt: sessionResponse.updated_at,
+        agentName: sessionResponse.messages.length > 0 ? sessionResponse.messages[0].agentName : undefined
       }
       
       setCurrentSession(session)

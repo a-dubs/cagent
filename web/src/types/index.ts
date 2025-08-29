@@ -29,12 +29,19 @@ export interface Toolset {
   [key: string]: any
 }
 
-// Backend session shape (minimal fields we use)
+// Backend session shape (matches sessionsResponse from server)
 export interface Session {
   id: string
-  title?: string
+  title: string
+  created_at: string
+  num_messages: number
+  input_tokens: number
+  output_tokens: number
+  most_recent_agent_filename: string
+  // For compatibility with existing code
   createdAt?: string
   updatedAt?: string
+  agentName?: string
 }
 
 // Backend session response with messages
@@ -43,6 +50,7 @@ export interface SessionResponse {
   title: string
   messages: SessionMessage[]
   created_at: string
+  updated_at?: string
   tools_approved: boolean
   input_tokens: number
   output_tokens: number

@@ -53,6 +53,13 @@ export function Layout({
     return date.toLocaleDateString()
   }
 
+  const formatAgentName = (agentFilename: string) => {
+    if (!agentFilename) return 'Unknown Agent'
+    // Remove .yaml extension and capitalize
+    const name = agentFilename.replace(/\.yaml?$/i, '')
+    return name.charAt(0).toUpperCase() + name.slice(1)
+  }
+
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Top Navigation Bar */}
@@ -131,10 +138,8 @@ export function Layout({
               {(() => {
                 const activeSessions = sessions.filter((session) => {
                   // Filter out sessions that are likely empty
-                  // Keep sessions that have an updatedAt different from createdAt (indicating activity)
-                  // or have a non-default title
-                  return session.updatedAt !== session.createdAt || 
-                         (session.title && session.title !== 'Untitled Chat');
+                  // Keep sessions that have messages
+                  return session.num_messages > 0;
                 });
                 
                 return activeSessions.length === 0 ? (
@@ -155,7 +160,10 @@ export function Layout({
                           {session.title || 'Untitled Chat'}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {formatTimeAgo(session.updatedAt || session.createdAt)}
+                          {formatTimeAgo(session.created_at)}
+                        </div>
+                        <div className="text-xs text-muted-foreground/70">
+                          {formatAgentName(session.most_recent_agent_filename)}
                         </div>
                       </div>
                     </Button>
