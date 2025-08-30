@@ -143,10 +143,53 @@
   .chat-message-prose code {
     padding: 0.075rem 0.25rem; /* ~1px 4px */
     border-radius: 0.25rem; /* 4px */
-    background-color: #fffa;
+    background-color: hsl(var(--muted) / 0.5);
+    font-size: 0.875em;
   }
   .chat-message-prose pre code {
     background-color: transparent;
     padding: 0;
+    font-size: inherit;
+  }
+
+  /* Enhanced table styling */
+  .chat-message-prose table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5rem 0;
+    font-size: 0.875rem;
+  }
+  
+  .chat-message-prose th,
+  .chat-message-prose td {
+    border: 1px solid hsl(var(--border));
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+  }
+  
+  .chat-message-prose th {
+    background-color: hsl(var(--muted) / 0.5);
+    font-weight: 600;
+  }
+  
+  .chat-message-prose tbody tr:nth-child(even) {
+    background-color: hsl(var(--muted) / 0.2);
+  }
+  
+  .chat-message-prose tbody tr:hover {
+    background-color: hsl(var(--muted) / 0.4);
+  }
+
+  /* Better syntax highlighting integration */
+  .chat-message-prose pre[class*="language-"] {
+    margin: 0.5rem 0;
+    border-radius: 0.5rem;
+    border: 1px solid hsl(var(--border) / 0.3);
+  }
+  
+  .chat-message-prose pre[class*="language-"] code {
+    background: transparent !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
   }
 }

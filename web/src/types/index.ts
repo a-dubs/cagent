@@ -117,6 +117,8 @@ export interface Message {
   completedTools?: CompletedToolCall[]
   // UI-specific flag to indicate if this is a tool bubble
   isToolBubble?: boolean
+  // UI-specific flag to indicate if this message contains both content and tools in a unified display
+  isUnifiedMessage?: boolean
   // For merged shell tool calls
   shellToolCall?: {
     id: string

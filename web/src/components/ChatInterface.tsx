@@ -6,7 +6,8 @@ import { Message } from '@/types'
 import { ToolCallDisplay } from '@/components/ToolCallDisplay'
 import { ShellToolCallView } from '@/components/ShellToolCallView'
 import { ThinkToolCallView } from '@/components/ThinkToolCallView'
-import ReactMarkdown from 'react-markdown'
+import { EnhancedMarkdown } from '@/components/EnhancedMarkdown'
+import { useTheme } from '@/hooks/useTheme'
 
 // Interface for merged shell tool calls
 interface MergedShellToolCall {
@@ -289,6 +290,7 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const { isDark } = useTheme()
 
   // Process messages to convert shell and think tool calls to use specialized components
   const processedMessages = processMessagesForSpecializedTools(messages)
@@ -361,48 +363,66 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
           if (message.role === 'tool') return false
           return true
         }).flatMap((message) => {
-          // For assistant messages, create separate bubbles for tool calls and content
+          // For assistant messages, create unified bubbles when possible
           if (message.role === 'assistant') {
             const bubbles = []
-            
-            // Add pending tool calls as separate bubbles
-            if (message.pendingTools && message.pendingTools.length > 0) {
-              message.pendingTools.forEach((tool) => {
-                bubbles.push({
-                  ...message,
-                  id: `${message.id}-pending-${tool.id}`,
-                  content: '',
-                  pendingTools: [tool],
-                  completedTools: [],
-                  isToolBubble: true
-                })
-              })
-            }
-            
-            // Add completed tool calls as separate bubbles
-            if (message.completedTools && message.completedTools.length > 0) {
-              message.completedTools.forEach((tool) => {
-                bubbles.push({
-                  ...message,
-                  id: `${message.id}-completed-${tool.id}`,
-                  content: '',
-                  pendingTools: [],
-                  completedTools: [tool],
-                  isToolBubble: true
-                })
-              })
-            }
-            
-            // Add final response bubble if there's content
             const contentStr = Array.isArray(message.content) ? message.content.join('\n') : message.content
-            if (contentStr && contentStr.trim()) {
+            const hasContent = contentStr && contentStr.trim()
+            const hasPendingTools = message.pendingTools && message.pendingTools.length > 0
+            const hasCompletedTools = message.completedTools && message.completedTools.length > 0
+            
+            // Check if we can create a unified bubble (content + tools together)
+            const canUnify = hasContent && (hasPendingTools || hasCompletedTools)
+            
+            if (canUnify) {
+              // Create a single unified bubble with both content and tools
               bubbles.push({
                 ...message,
-                id: `${message.id}-content`,
-                pendingTools: [],
-                completedTools: [],
-                isToolBubble: false
+                id: `${message.id}-unified`,
+                isToolBubble: false,
+                isUnifiedMessage: true // Flag to indicate this has both content and tools
               })
+            } else {
+              // Fall back to separate bubbles when no content or no tools
+              
+              // Add pending tool calls as separate bubbles
+              if (message.pendingTools && message.pendingTools.length > 0) {
+                message.pendingTools.forEach((tool) => {
+                  bubbles.push({
+                    ...message,
+                    id: `${message.id}-pending-${tool.id}`,
+                    content: '',
+                    pendingTools: [tool],
+                    completedTools: [],
+                    isToolBubble: true
+                  })
+                })
+              }
+              
+              // Add completed tool calls as separate bubbles
+              if (message.completedTools && message.completedTools.length > 0) {
+                message.completedTools.forEach((tool) => {
+                  bubbles.push({
+                    ...message,
+                    id: `${message.id}-completed-${tool.id}`,
+                    content: '',
+                    pendingTools: [],
+                    completedTools: [tool],
+                    isToolBubble: true
+                  })
+                })
+              }
+              
+              // Add final response bubble if there's content (and no tools to unify with)
+              if (hasContent && !hasPendingTools && !hasCompletedTools) {
+                bubbles.push({
+                  ...message,
+                  id: `${message.id}-content`,
+                  pendingTools: [],
+                  completedTools: [],
+                  isToolBubble: false
+                })
+              }
             }
             
             return bubbles.length > 0 ? bubbles : [message]
@@ -462,6 +482,32 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
                 }
 
                 if (message.role === 'assistant') {
+                  // Check if this is a unified message (content + tools together)
+                  if ((message as any).isUnifiedMessage) {
+                    const hasTools = (message.pendingTools && message.pendingTools.length > 0) || 
+                                     (message.completedTools && message.completedTools.length > 0)
+                    
+                    return (
+                      <div className="space-y-3">
+                        {/* Content first */}
+                        {contentStr && contentStr.trim() && (
+                          <EnhancedMarkdown isDark={isDark}>
+                            {contentStr}
+                          </EnhancedMarkdown>
+                        )}
+                        
+                        {/* Tool calls below content */}
+                        {hasTools && (
+                          <ToolCallDisplay 
+                            pendingTools={message.pendingTools}
+                            completedTools={message.completedTools}
+                            onApprove={onToolApprove}
+                          />
+                        )}
+                      </div>
+                    )
+                  }
+                  
                   // If this is a tool bubble, show only the tool call
                   if (message.isToolBubble) {
                     const hasTools = (message.pendingTools && message.pendingTools.length > 0) || 
@@ -479,9 +525,9 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
                     // This is the final response bubble, show only content
                     if (contentStr && contentStr.trim()) {
                       return (
-                        <div className="prose prose-sm max-w-none dark:prose-invert chat-message-prose">
-                          <ReactMarkdown>{contentStr}</ReactMarkdown>
-                        </div>
+                        <EnhancedMarkdown isDark={isDark}>
+                          {contentStr}
+                        </EnhancedMarkdown>
                       )
                     }
                   }
