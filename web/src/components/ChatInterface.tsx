@@ -148,33 +148,46 @@ const processMessagesForSpecializedTools = (messages: Message[]): Message[] => {
           completedTools: nonSpecializedTools.length > 0 ? nonSpecializedTools : undefined
         }
 
-        const specializedMessages = []
+        // Create all specialized messages and sort them chronologically
+        const allSpecializedTools = [
+          ...shellTools.map(shellTool => ({ type: 'shell', tool: shellTool })),
+          ...thinkTools.map(thinkTool => ({ type: 'think', tool: thinkTool }))
+        ]
 
-        // Add shell tool messages
-        const shellMessages = shellTools.map(shellTool => ({
-          ...message,
-          id: `${message.id}-shell-${shellTool.id}`,
-          content: '',
-          completedTools: undefined,
-          pendingTools: undefined,
-          shellToolCall: shellTool
-        }))
-        specializedMessages.push(...shellMessages)
+        // Sort by timestamp to maintain chronological order
+        allSpecializedTools.sort((a, b) => {
+          const timestampA = new Date(a.tool.timestamp).getTime()
+          const timestampB = new Date(b.tool.timestamp).getTime()
+          return timestampA - timestampB
+        })
 
-        // Add think tool messages
-        const thinkMessages = thinkTools.map(thinkTool => ({
-          ...message,
-          id: `${message.id}-think-${thinkTool.id}`,
-          content: '',
-          completedTools: undefined,
-          pendingTools: undefined,
-          thinkToolCall: thinkTool
-        }))
-        specializedMessages.push(...thinkMessages)
+        // Create messages in chronological order
+        const specializedMessages = allSpecializedTools.map(({ type, tool }) => {
+          if (type === 'shell') {
+            return {
+              ...message,
+              id: `${message.id}-shell-${tool.id}`,
+              content: '',
+              completedTools: undefined,
+              pendingTools: undefined,
+              shellToolCall: tool
+            }
+          } else {
+            return {
+              ...message,
+              id: `${message.id}-think-${tool.id}`,
+              content: '',
+              completedTools: undefined,
+              pendingTools: undefined,
+              thinkToolCall: tool
+            }
+          }
+        })
 
         // If there are non-specialized tools or content, include the original message
+        // Put specialized tools first (chronologically), then the final response
         if (nonSpecializedTools.length > 0 || message.content) {
-          return [processedMessage, ...specializedMessages]
+          return [...specializedMessages, processedMessage]
         } else {
           return specializedMessages
         }
