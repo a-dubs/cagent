@@ -1,20 +1,10 @@
 import { Button } from '@/components/ui/button'
 import { MessageCircle, Bot, Upload, Play, Zap, Shield, Clock } from 'lucide-react'
-import { AgentSetup } from '@/types'
+import { useAppContext } from '@/hooks/useAppContext'
+import { QuickStartGuide } from '@/components/QuickStartGuide'
 
-interface HomePageProps {
-  recentSetups: AgentSetup[]
-  onSetupSelect: (setup: AgentSetup) => void
-  onNavigateToSetups: () => void
-  onNavigateToConfigs: () => void
-}
-
-export function HomePage({ 
-  recentSetups, 
-  onSetupSelect, 
-  onNavigateToSetups, 
-  onNavigateToConfigs 
-}: HomePageProps) {
+export function HomePage() {
+  const { agentSetups, handleAgentSetupSelect, handleNavigate } = useAppContext()
   return (
     <div className="flex-1 overflow-y-auto bg-gradient-to-br from-background to-muted/20">
       <div className="max-w-6xl mx-auto p-8">
@@ -70,6 +60,11 @@ export function HomePage({
           </div>
         </div>
 
+        {/* Quick Start Guide */}
+        <div className="mb-8">
+          <QuickStartGuide />
+        </div>
+
         {/* Quick Actions */}
         <div className="bg-card border rounded-lg p-8 mb-8">
           <h2 className="text-2xl font-semibold mb-6">Get Started</h2>
@@ -82,10 +77,15 @@ export function HomePage({
               <p className="text-muted-foreground mb-4">
                 Create and manage agent configurations with custom working directories, environment variables, and tool access.
               </p>
-              <Button onClick={onNavigateToSetups} className="w-full">
-                <Bot className="h-4 w-4 mr-2" />
-                Manage Agent Setups
-              </Button>
+              <div className="space-y-2">
+                <Button onClick={() => handleNavigate('agent-creator')} className="w-full">
+                  <Bot className="h-4 w-4 mr-2" />
+                  Create New Agent
+                </Button>
+                <Button onClick={() => handleNavigate('setups')} variant="outline" className="w-full">
+                  Manage Existing Setups
+                </Button>
+              </div>
             </div>
 
             <div>
@@ -96,7 +96,7 @@ export function HomePage({
               <p className="text-muted-foreground mb-4">
                 Upload and organize agent configuration files that define models, toolsets, and behavior patterns.
               </p>
-              <Button onClick={onNavigateToConfigs} variant="outline" className="w-full">
+              <Button onClick={() => handleNavigate('configs')} variant="outline" className="w-full">
                 <Upload className="h-4 w-4 mr-2" />
                 Manage Configurations
               </Button>
@@ -105,11 +105,11 @@ export function HomePage({
         </div>
 
         {/* Recent Setups */}
-        {recentSetups.length > 0 && (
+        {agentSetups.length > 0 && (
           <div className="bg-card border rounded-lg p-8">
             <h2 className="text-2xl font-semibold mb-6">Recent Agent Setups</h2>
             <div className="grid gap-4">
-              {recentSetups.slice(0, 3).map((setup) => (
+              {agentSetups.slice(0, 3).map((setup) => (
                 <div
                   key={setup.id}
                   className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
@@ -124,7 +124,7 @@ export function HomePage({
                     </div>
                   </div>
                   <Button 
-                    onClick={() => onSetupSelect(setup)}
+                    onClick={() => handleAgentSetupSelect(setup)}
                     className="flex items-center gap-2"
                   >
                     <Play className="h-4 w-4" />

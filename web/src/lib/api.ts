@@ -1,4 +1,4 @@
-import { AgentSetup, CustomAgentPath, DirectoryBrowseResponse } from '@/types'
+import { AgentSetup, CustomAgentPath, DirectoryBrowseResponse, Session, SessionResponse } from '@/types'
 
 const API_BASE = '/api'
 
@@ -90,6 +90,11 @@ export const directoryApi = {
 
 // Session management API functions
 export const sessionApi = {
+  getSessions: () => apiClient.get<Session[]>('/sessions'),
+  getSession: (sessionId: string) => apiClient.get<SessionResponse>(`/sessions/${sessionId}`),
+  createSession: (agentFilename: string) => apiClient.post<SessionResponse>('/sessions', { agent_filename: agentFilename }),
+  updateSession: (sessionId: string, data: Partial<Session>) => 
+    apiClient.put(`/sessions/${sessionId}`, data),
   updateSessionTitle: (sessionId: string, title: string) => 
     apiClient.put(`/sessions/${sessionId}`, { title }),
   deleteSession: (sessionId: string) => 

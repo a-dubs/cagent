@@ -59,6 +59,7 @@ export function Layout({
   const navItems = [
     { id: 'home', label: 'Home', icon: MessageCircle },
     { id: 'setups', label: 'Agent Setups', icon: Bot },
+    { id: 'agent-creator', label: 'Create Agent', icon: Plus },
     { id: 'configs', label: 'Config Manager', icon: Upload },
   ]
 

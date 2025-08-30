@@ -104,7 +104,7 @@ export function NewChatModal({
               <div className="flex items-center justify-between pt-4 border-t">
                 <Button variant="outline" onClick={handleCreateNew}>
                   <SettingsIcon className="h-4 w-4 mr-2" />
-                  Create New Setup
+                  Create New Agent
                 </Button>
                 
                 <div className="flex gap-2">

@@ -1,28 +1,36 @@
 
+import { useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { ChatInterface } from '@/components/ChatInterface'
-import { Message, AgentSetup, Session } from '@/types'
+import { useAppContext } from '@/hooks/useAppContext'
 
-interface ChatPageProps {
-  messages: Message[]
-  isLoading: boolean
-  currentAgentSetup: AgentSetup | null
-  currentSession: Session | null
-  onSendMessage: (content: string) => void
-  onConfirm: (confirmation: 'approve' | 'approve-session' | 'reject') => void
-  onToolApprove: (toolCallId: string, approval: 'approve' | 'approve-session' | 'reject') => void
-  onStartSession?: () => void
-}
+export function ChatPage() {
+  const { sessionId } = useParams<{ sessionId: string }>()
+  const navigate = useNavigate()
+  const {
+    messages,
+    isLoading,
+    currentAgentSetup,
+    currentSession,
+    sendMessage,
+    sendConfirmation,
+    handleToolApproval,
+    handleStartSession,
+    handleSessionSelect
+  } = useAppContext()
 
-export function ChatPage({
-  messages,
-  isLoading,
-  currentAgentSetup,
-  currentSession,
-  onSendMessage,
-  onConfirm,
-  onToolApprove,
-  onStartSession
-}: ChatPageProps) {
+  useEffect(() => {
+    if (sessionId && sessionId !== currentSession?.id) {
+      handleSessionSelect(sessionId)
+    }
+  }, [sessionId, currentSession?.id, handleSessionSelect])
+
+  // Redirect to home if no session ID
+  useEffect(() => {
+    if (!sessionId) {
+      navigate('/', { replace: true })
+    }
+  }, [sessionId, navigate])
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Chat Header */}
@@ -53,12 +61,12 @@ export function ChatPage({
       <div className="flex-1 min-h-0">
         <ChatInterface 
           messages={messages}
-          onSendMessage={onSendMessage}
+          onSendMessage={sendMessage}
           isLoading={isLoading}
-          onConfirm={onConfirm}
-          onToolApprove={(toolCallId) => onToolApprove(toolCallId, 'approve')}
+          onConfirm={sendConfirmation}
+          onToolApprove={(toolCallId) => handleToolApproval(toolCallId, 'approve')}
           showStartSession={!!(currentSession && !currentAgentSetup)}
-          onStartSession={onStartSession}
+          onStartSession={handleStartSession}
           agentFilename={currentSession?.most_recent_agent_filename}
         />
       </div>
