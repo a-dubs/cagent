@@ -96,6 +96,31 @@ export function EnhancedMarkdown({ children, className = '', isDark = false }: E
             return <span className="whitespace-pre-wrap">{children}</span>
           },
           
+          // Enhanced header styling
+          h1({ children }) {
+            return <h1 className="text-xl font-bold border-b-2 border-border pb-2 mb-4 mt-6 first:mt-0 last:mb-0">{children}</h1>
+          },
+          
+          h2({ children }) {
+            return <h2 className="text-lg font-semibold border-b border-border/50 pb-1 mb-3 mt-5 first:mt-0 last:mb-0">{children}</h2>
+          },
+          
+          h3({ children }) {
+            return <h3 className="text-base font-medium mb-2 mt-4 first:mt-0 last:mb-0">{children}</h3>
+          },
+          
+          h4({ children }) {
+            return <h4 className="text-sm font-medium italic text-muted-foreground mb-1.5 mt-3.5 first:mt-0 last:mb-0">{children}</h4>
+          },
+          
+          h5({ children }) {
+            return <h5 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1 mt-3 first:mt-0 last:mb-0">{children}</h5>
+          },
+          
+          h6({ children }) {
+            return <h6 className="text-xs font-normal uppercase tracking-widest text-muted-foreground/80 mb-0.5 mt-2 first:mt-0 last:mb-0">{children}</h6>
+          },
+          
           // Enhanced blockquote styling
           blockquote({ children }) {
             return (
