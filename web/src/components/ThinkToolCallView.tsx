@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, Brain, CheckCircle, Clock } from 'lucide-react'
+import { EnhancedMarkdown } from './EnhancedMarkdown'
+import { useTheme } from '@/hooks/useTheme'
 
 interface ThinkToolCall {
   id: string
@@ -16,10 +18,15 @@ interface ThinkToolCall {
 
 interface ThinkToolCallViewProps {
   toolCall: ThinkToolCall
+  isExpanded?: boolean
+  isLiveSession?: boolean
 }
 
-export function ThinkToolCallView({ toolCall }: ThinkToolCallViewProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
+export function ThinkToolCallView({ toolCall, isExpanded: propIsExpanded, isLiveSession = false }: ThinkToolCallViewProps) {
+  // For live sessions, use prop-controlled expansion. For past sessions, use local state (default collapsed)
+  const [localIsExpanded, setLocalIsExpanded] = useState(false)
+  const isExpanded = isLiveSession ? (propIsExpanded ?? false) : localIsExpanded
+  const { isDark } = useTheme()
 
   const getStatusIcon = () => {
     switch (toolCall.status) {
@@ -44,7 +51,15 @@ export function ThinkToolCallView({ toolCall }: ThinkToolCallViewProps) {
       {/* Header */}
       <div 
         className="flex items-center gap-2 p-3 cursor-pointer hover:bg-purple-100/50 dark:hover:bg-purple-900/20 transition-colors"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => {
+          if (isLiveSession) {
+            // In live sessions, expansion is controlled by parent, so we don't toggle
+            return
+          } else {
+            // In past sessions, we control expansion locally
+            setLocalIsExpanded(!localIsExpanded)
+          }
+        }}
       >
         {isExpanded ? (
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -81,9 +96,9 @@ export function ThinkToolCallView({ toolCall }: ThinkToolCallViewProps) {
                 <div>
                   <div className="text-xs font-medium text-muted-foreground mb-1">Thinking:</div>
                   <div className="bg-white/60 dark:bg-gray-800/60 rounded p-3 border border-purple-200/50 dark:border-purple-800/50 max-h-60 overflow-auto">
-                    <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed font-sans">
+                    <EnhancedMarkdown isDark={isDark} className="text-sm">
                       {thoughtContent}
-                    </pre>
+                    </EnhancedMarkdown>
                   </div>
                 </div>
               )
@@ -91,22 +106,24 @@ export function ThinkToolCallView({ toolCall }: ThinkToolCallViewProps) {
               // Show both sections when they're different
               return (
                 <>
-                  {thoughtContent && (
-                    <div>
-                      <div className="text-xs font-medium text-muted-foreground mb-1">Thought:</div>
-                      <div className="bg-white/60 dark:bg-gray-800/60 rounded p-2 border border-purple-200/50 dark:border-purple-800/50">
-                        <span className="text-sm text-gray-700 dark:text-gray-300 italic">"{thoughtContent}"</span>
-                      </div>
-                    </div>
-                  )}
-
                   {thinkingContent && (
                     <div>
                       <div className="text-xs font-medium text-muted-foreground mb-1">Thinking Process:</div>
                       <div className="bg-white/60 dark:bg-gray-800/60 rounded p-3 border border-purple-200/50 dark:border-purple-800/50 max-h-60 overflow-auto">
-                        <pre className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed font-sans">
+                        <EnhancedMarkdown isDark={isDark} className="text-sm">
                           {thinkingContent}
-                        </pre>
+                        </EnhancedMarkdown>
+                      </div>
+                    </div>
+                  )}
+
+                  {thoughtContent && (
+                    <div>
+                      <div className="text-xs font-medium text-muted-foreground mb-1">Thought:</div>
+                      <div className="bg-white/60 dark:bg-gray-800/60 rounded p-2 border border-purple-200/50 dark:border-purple-800/50">
+                        <EnhancedMarkdown isDark={isDark} className="text-sm">
+                          {thoughtContent}
+                        </EnhancedMarkdown>
                       </div>
                     </div>
                   )}

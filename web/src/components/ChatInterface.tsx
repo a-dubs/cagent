@@ -46,13 +46,25 @@ const processMessagesForSpecializedTools = (messages: Message[]): Message[] => {
   })
 
   return messages.map(message => {
-    // Check if this message has completed tools that are shell or think commands
-    if (message.completedTools && message.completedTools.length > 0) {
+    // Check if this message has tool_use items in content array (new format)
+    const toolUseItems: any[] = []
+    if (Array.isArray(message.content)) {
+      message.content.forEach((item: any) => {
+        if (item.type === 'tool_use') {
+          toolUseItems.push(item)
+        }
+      })
+    }
+
+    // Check if this message has completed tools that are shell or think commands (old format)
+    if ((message.completedTools && message.completedTools.length > 0) || toolUseItems.length > 0) {
       const shellTools: MergedShellToolCall[] = []
       const thinkTools: any[] = []
       const nonSpecializedTools: typeof message.completedTools = []
 
-      message.completedTools.forEach(tool => {
+      // Process completedTools (old format)
+      if (message.completedTools) {
+        message.completedTools.forEach(tool => {
         const isShellTool = tool.name === 'shell' || 
                            tool.name === 'run_terminal_cmd' || 
                            tool.name?.toLowerCase().includes('shell') ||
@@ -149,12 +161,58 @@ const processMessagesForSpecializedTools = (messages: Message[]): Message[] => {
         } else {
           nonSpecializedTools.push(tool)
         }
+        })
+      }
+
+      // Process toolUseItems (new format - multiple tool_use in content array)
+      toolUseItems.forEach(toolUse => {
+        const isThinkTool = toolUse.name?.toLowerCase().includes('think')
+        
+        if (isThinkTool) {
+          const thought = toolUse.input?.thought || ''
+          const toolOutput = toolOutputs.get(toolUse.id) || ''
+          
+          // Create thinking structure
+          let thinking
+          if (toolOutput) {
+            // Remove "Thoughts:\n" prefix if present in output
+            const cleanOutput = toolOutput.replace(/^Thoughts?:\s*\n?/i, '')
+            thinking = {
+              summary: thought.length > 100 ? thought.substring(0, 100) + '...' : thought,
+              full: cleanOutput || thought
+            }
+          } else {
+            thinking = {
+              summary: thought.length > 100 ? thought.substring(0, 100) + '...' : thought,
+              full: thought
+            }
+          }
+
+          thinkTools.push({
+            id: toolUse.id,
+            name: toolUse.name,
+            thought: thought,
+            thinking: thinking,
+            status: 'completed',
+            timestamp: message.timestamp || new Date(Date.now() - 60000).toISOString(), // Use message timestamp or old fallback
+            duration: undefined
+          })
+        }
+        // Add other tool types here if needed (shell, etc.)
       })
 
       // If we found specialized tools, create separate messages for them
       if (shellTools.length > 0 || thinkTools.length > 0) {
+        // Extract text content from message, excluding tool_use items
+        let textContent = message.content
+        if (Array.isArray(message.content) && toolUseItems.length > 0) {
+          const textItems = message.content.filter((item: any) => item.type === 'text')
+          textContent = textItems.map((item: any) => item.text).join('\n')
+        }
+
         const processedMessage = {
           ...message,
+          content: textContent,
           completedTools: nonSpecializedTools.length > 0 ? nonSpecializedTools : undefined
         }
 
@@ -315,11 +373,47 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { isDark } = useTheme()
 
+  // Determine if this is a live session (has loading state or pending tools)
+  // Don't use timestamp-based detection as it's unreliable for stored sessions
+  const isLiveSession = isLoading || messages.some(msg => 
+    (msg.pendingTools && msg.pendingTools.length > 0)
+  )
+
   // Memoize the expensive message processing to avoid running on every render
   const processedMessages = useMemo(() => 
     processMessagesForSpecializedTools(messages), 
     [messages]
   )
+
+  // Find the most recent tool call ID for auto-expansion in live sessions
+  const mostRecentToolCallId = useMemo(() => {
+    if (!isLiveSession) return null
+    
+    let latestTimestamp = 0
+    let latestToolId = null
+    
+    processedMessages.forEach(message => {
+      // Check shell tool calls
+      if (message.shellToolCall) {
+        const timestamp = new Date(message.shellToolCall.timestamp).getTime()
+        if (timestamp > latestTimestamp) {
+          latestTimestamp = timestamp
+          latestToolId = message.shellToolCall.id
+        }
+      }
+      
+      // Check think tool calls
+      if (message.thinkToolCall) {
+        const timestamp = new Date(message.thinkToolCall.timestamp).getTime()
+        if (timestamp > latestTimestamp) {
+          latestTimestamp = timestamp
+          latestToolId = message.thinkToolCall.id
+        }
+      }
+    })
+    
+    return latestToolId
+  }, [processedMessages, isLiveSession])
 
   // Memoize the filtered and flattened messages to avoid expensive operations on every render
   const renderedMessages = useMemo(() => {
@@ -502,6 +596,8 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
                     <ShellToolCallView 
                       toolCall={message.shellToolCall}
                       onApprove={onToolApprove}
+                      isExpanded={mostRecentToolCallId === message.shellToolCall.id}
+                      isLiveSession={isLiveSession}
                     />
                   )
                 }
@@ -511,6 +607,8 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
                   return (
                     <ThinkToolCallView 
                       toolCall={message.thinkToolCall}
+                      isExpanded={mostRecentToolCallId === message.thinkToolCall.id}
+                      isLiveSession={isLiveSession}
                     />
                   )
                 }

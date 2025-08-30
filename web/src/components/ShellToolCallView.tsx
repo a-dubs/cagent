@@ -16,10 +16,14 @@ interface ShellToolCall {
 interface ShellToolCallViewProps {
   toolCall: ShellToolCall
   onApprove?: (toolId: string, approval: 'approve' | 'approve-session' | 'reject') => void
+  isExpanded?: boolean
+  isLiveSession?: boolean
 }
 
-export function ShellToolCallView({ toolCall, onApprove }: ShellToolCallViewProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
+export function ShellToolCallView({ toolCall, onApprove, isExpanded: propIsExpanded, isLiveSession = false }: ShellToolCallViewProps) {
+  // For live sessions, use prop-controlled expansion. For past sessions, use local state (default collapsed)
+  const [localIsExpanded, setLocalIsExpanded] = useState(false)
+  const isExpanded = isLiveSession ? (propIsExpanded ?? false) : localIsExpanded
 
   const getStatusIcon = () => {
     switch (toolCall.status) {
@@ -46,7 +50,15 @@ export function ShellToolCallView({ toolCall, onApprove }: ShellToolCallViewProp
       {/* Header */}
       <div 
         className="flex items-center gap-2 p-3 cursor-pointer hover:bg-gray-800 transition-colors border-b border-gray-700"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => {
+          if (isLiveSession) {
+            // In live sessions, expansion is controlled by parent, so we don't toggle
+            return
+          } else {
+            // In past sessions, we control expansion locally
+            setLocalIsExpanded(!localIsExpanded)
+          }
+        }}
       >
         {isExpanded ? (
           <ChevronDown className="h-4 w-4 text-gray-400" />
