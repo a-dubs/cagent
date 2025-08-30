@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Code, FileText, Database, Globe, Bot, Terminal, Zap, Users, BookOpen, X } from 'lucide-react'
-import { useAppContext } from '@/hooks/useAppContext'
+import { AgentConfigGenerator } from '@/components/AgentConfigGenerator'
 
 interface AgentTemplate {
   id: string
@@ -147,7 +147,6 @@ const CATEGORIES = ['All', 'Development', 'Analytics', 'Research', 'Operations',
 
 export function AgentTemplates() {
   const navigate = useNavigate()
-  const { setAgentSetups } = useAppContext()
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [selectedTemplate, setSelectedTemplate] = useState<AgentTemplate | null>(null)
 
@@ -155,22 +154,64 @@ export function AgentTemplates() {
     ? AGENT_TEMPLATES 
     : AGENT_TEMPLATES.filter(template => template.category === selectedCategory)
 
-  const handleUseTemplate = async (template: AgentTemplate) => {
+  const handleUseTemplate = (template: AgentTemplate) => {
+    // Navigate to form builder with template data pre-filled
+    const templateData = {
+      name: template.name,
+      description: template.description,
+      instruction: template.instruction,
+      model: template.model,
+      provider: template.provider,
+      toolsets: template.toolsets,
+      workingDirectory: '/tmp',
+      environmentVariables: {}
+    }
+    
+    // Pass template data via URL state
+    navigate('/agents/create', { 
+      state: { 
+        templateData,
+        activeTab: 'form'
+      } 
+    })
+  }
+
+  const handleCreateDirectly = async (template: AgentTemplate) => {
     try {
-      // Create agent setup from template
-      const agentSetup = {
+      // Create agent configuration directly from template
+      const formData = {
         name: template.name,
         description: template.description,
-        agent_config_path: `${template.name.toLowerCase().replace(/\s+/g, '-')}.yaml`,
-        working_directory: '/tmp',
-        environment_variables: {},
-        id: Date.now() // Temporary ID
+        instruction: template.instruction,
+        model: template.model,
+        provider: template.provider,
+        temperature: 0.7,
+        maxTokens: 4096,
+        toolsets: template.toolsets,
+        workingDirectory: '/tmp',
+        environmentVariables: {},
+        addDate: true
       }
+      
+      const config = AgentConfigGenerator.generateConfig(formData)
+      const yaml = AgentConfigGenerator.generateYAML(config)
+      
+      // Auto-download the YAML file
+      const blob = new Blob([yaml], { type: 'text/yaml' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${template.name.toLowerCase().replace(/\s+/g, '-')}.yaml`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
 
-      setAgentSetups(prev => [...prev, agentSetup])
-      navigate('/agents')
+      alert(`Agent "${template.name}" created successfully! The configuration file has been downloaded.`)
+      setSelectedTemplate(null)
     } catch (error) {
       console.error('Failed to create agent from template:', error)
+      alert('Failed to create agent. Please try again.')
     }
   }
 
@@ -249,7 +290,7 @@ export function AgentTemplates() {
                       className="flex-1"
                     >
                       <Bot className="h-4 w-4 mr-1" />
-                      Use Template
+                      Customize
                     </Button>
                   </div>
                 </CardContent>
@@ -310,25 +351,32 @@ export function AgentTemplates() {
                 </div>
               </div>
               
-              <div className="flex gap-2 pt-4">
-                <Button 
-                  variant="outline" 
-                  onClick={() => setSelectedTemplate(null)}
-                  className="flex-1"
-                >
-                  Close
-                </Button>
-                <Button 
-                  onClick={() => {
-                    handleUseTemplate(selectedTemplate)
-                    setSelectedTemplate(null)
-                  }}
-                  className="flex-1"
-                >
-                  <Bot className="h-4 w-4 mr-2" />
-                  Use This Template
-                </Button>
-              </div>
+                                <div className="flex gap-2 pt-4">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setSelectedTemplate(null)}
+                    >
+                      Close
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        handleUseTemplate(selectedTemplate)
+                        setSelectedTemplate(null)
+                      }}
+                      className="flex-1"
+                    >
+                      <Bot className="h-4 w-4 mr-2" />
+                      Customize Template
+                    </Button>
+                    <Button 
+                      onClick={() => handleCreateDirectly(selectedTemplate)}
+                      className="flex-1"
+                    >
+                      <Zap className="h-4 w-4 mr-2" />
+                      Use As-Is
+                    </Button>
+                  </div>
             </CardContent>
           </Card>
         </div>

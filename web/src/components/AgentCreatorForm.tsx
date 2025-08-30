@@ -8,7 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Plus, X, Save, Bot, Settings, Database, Terminal, FileText, Globe, Download, AlertCircle } from 'lucide-react'
-import { useAppContext } from '@/hooks/useAppContext'
 import { AgentConfigGenerator } from '@/components/AgentConfigGenerator'
 
 interface AgentFormData {
@@ -38,21 +37,24 @@ const MODEL_PROVIDERS = [
   { id: 'local', name: 'Local/Ollama', models: ['llama2', 'codellama', 'mistral'] },
 ]
 
-export function AgentCreatorForm() {
+interface AgentCreatorFormProps {
+  templateData?: any
+}
+
+export function AgentCreatorForm({ templateData }: AgentCreatorFormProps) {
   const navigate = useNavigate()
-  const { setAgentSetups } = useAppContext()
   
   const [formData, setFormData] = useState<AgentFormData>({
-    name: '',
-    description: '',
-    instruction: '',
-    model: '',
-    provider: '',
+    name: templateData?.name || '',
+    description: templateData?.description || '',
+    instruction: templateData?.instruction || '',
+    model: templateData?.model || '',
+    provider: templateData?.provider || '',
     temperature: 0.7,
     maxTokens: 4096,
-    workingDirectory: '',
-    environmentVariables: {},
-    toolsets: [],
+    workingDirectory: templateData?.workingDirectory || '',
+    environmentVariables: templateData?.environmentVariables || {},
+    toolsets: templateData?.toolsets || [],
     addDate: true
   })
 
@@ -123,20 +125,27 @@ export function AgentCreatorForm() {
     setIsSubmitting(true)
 
     try {
-      // Create the agent setup
-      const agentSetup = {
-        name: formData.name,
-        description: formData.description,
-        agent_config_path: `${formData.name.toLowerCase().replace(/\s+/g, '-')}.yaml`,
-        working_directory: formData.workingDirectory || '/tmp',
-        environment_variables: formData.environmentVariables,
-        id: Date.now()
-      }
+      // Generate the agent configuration
+      const config = AgentConfigGenerator.generateConfig(formData)
+      const yaml = AgentConfigGenerator.generateYAML(config)
+      
+      // Auto-download the YAML file
+      const blob = new Blob([yaml], { type: 'text/yaml' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${formData.name.toLowerCase().replace(/\s+/g, '-')}.yaml`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
 
-      setAgentSetups(prev => [...prev, agentSetup])
+      // Show success message and redirect
+      alert(`Agent "${formData.name}" created successfully! The configuration file has been downloaded.`)
       navigate('/agents')
     } catch (error) {
       console.error('Failed to create agent:', error)
+      alert('Failed to create agent. Please check the form and try again.')
     } finally {
       setIsSubmitting(false)
     }
@@ -158,6 +167,25 @@ export function AgentCreatorForm() {
 
   const selectedProvider = MODEL_PROVIDERS.find(p => p.id === formData.provider)
 
+  // Update form data when template data changes
+  React.useEffect(() => {
+    if (templateData) {
+      setFormData({
+        name: templateData.name || '',
+        description: templateData.description || '',
+        instruction: templateData.instruction || '',
+        model: templateData.model || '',
+        provider: templateData.provider || '',
+        temperature: 0.7,
+        maxTokens: 4096,
+        workingDirectory: templateData.workingDirectory || '',
+        environmentVariables: templateData.environmentVariables || {},
+        toolsets: templateData.toolsets || [],
+        addDate: true
+      })
+    }
+  }, [templateData])
+
   // Auto-generate YAML preview when form changes
   React.useEffect(() => {
     if (formData.name && formData.instruction && formData.model && formData.provider) {
@@ -167,6 +195,21 @@ export function AgentCreatorForm() {
 
   return (
     <div className="space-y-8">
+      {/* Template Info */}
+      {templateData && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg text-blue-900 flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Customizing Template: {templateData.name}
+            </CardTitle>
+            <CardDescription className="text-blue-700">
+              You can modify any of the pre-filled values below to customize this template to your needs.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
       {/* Validation Errors */}
       {validationErrors.length > 0 && (
         <Card className="border-red-200 bg-red-50">
@@ -459,7 +502,7 @@ export function AgentCreatorForm() {
           disabled={isSubmitting || validationErrors.length > 0 || !formData.name || !formData.instruction}
         >
           <Save className="h-4 w-4 mr-2" />
-          {isSubmitting ? 'Creating...' : 'Create Agent'}
+          {isSubmitting ? 'Creating...' : 'Create & Download Agent'}
         </Button>
       </div>
       </form>

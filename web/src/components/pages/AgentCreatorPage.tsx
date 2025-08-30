@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -9,8 +10,18 @@ import { AgentAssistant } from '@/components/AgentAssistant'
 import { useAppContext } from '@/hooks/useAppContext'
 
 export function AgentCreatorPage() {
+  const location = useLocation()
   const { handleNavigate } = useAppContext()
   const [activeTab, setActiveTab] = useState('form')
+  const [templateData, setTemplateData] = useState(null)
+
+  useEffect(() => {
+    // Check if we have template data from navigation state
+    if (location.state?.templateData) {
+      setTemplateData(location.state.templateData)
+      setActiveTab(location.state.activeTab || 'form')
+    }
+  }, [location.state])
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -69,7 +80,7 @@ export function AgentCreatorPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <AgentCreatorForm />
+                  <AgentCreatorForm templateData={templateData} />
                 </CardContent>
               </Card>
             </TabsContent>

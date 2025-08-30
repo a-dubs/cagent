@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Bot, Send, User, Sparkles, CheckCircle, Copy } from 'lucide-react'
-import { useAppContext } from '@/hooks/useAppContext'
+
 
 interface ChatMessage {
   id: string
@@ -15,7 +15,6 @@ interface ChatMessage {
 
 export function AgentCreationAssistant() {
   const navigate = useNavigate()
-  const { setAgentSetups } = useAppContext()
   
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -178,16 +177,22 @@ The more details you provide, the better I can tailor the agent configuration fo
 
   const handleCreateAgent = async (config: any) => {
     try {
-      const agentSetup = {
-        name: config.name,
-        description: config.description,
-        agent_config_path: `${config.name.toLowerCase().replace(/\s+/g, '-')}.yaml`,
-        working_directory: config.workingDirectory,
-        environment_variables: config.environmentVariables,
-        id: Date.now()
-      }
+      // Generate the actual agent YAML configuration
+      
+      const yaml = generateYAMLConfig(config)
+      
+      // Auto-download the YAML file
+      const blob = new Blob([yaml], { type: 'text/yaml' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${config.name.toLowerCase().replace(/\s+/g, '-')}.yaml`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
 
-      setAgentSetups(prev => [...prev, agentSetup])
+      alert(`Agent "${config.name}" created successfully! The configuration file has been downloaded.`)
       navigate('/agents')
     } catch (error) {
       console.error('Failed to create agent:', error)
