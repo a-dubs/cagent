@@ -112,6 +112,16 @@ const processMessagesForSpecializedTools = (messages: Message[]): Message[] => {
                   full: thought
                 }
               }
+            } else {
+              // For live sessions, improve the summary if it's just "Thoughts:" or similar
+              if (thinking.summary && (thinking.summary.trim() === 'Thoughts:' || thinking.summary.trim() === 'Thinking...' || thinking.summary.length < 10)) {
+                // Use the thought from args or the full thinking content for a better summary
+                const betterSummary = thought || thinking.full || 'Thinking...'
+                thinking = {
+                  ...thinking,
+                  summary: betterSummary.length > 100 ? betterSummary.substring(0, 100) + '...' : betterSummary
+                }
+              }
             }
           } catch {
             thought = tool.args || ''
