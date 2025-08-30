@@ -42,7 +42,7 @@ export function ShellToolCallView({ toolCall, onApprove }: ShellToolCallViewProp
   }
 
   return (
-    <div className="border border-border/30 rounded-md bg-gray-900 text-gray-100 font-mono text-sm">
+    <div className="border border-border/30 rounded-md bg-gray-900 text-gray-100 font-mono text-xs">
       {/* Header */}
       <div 
         className="flex items-center gap-2 p-3 cursor-pointer hover:bg-gray-800 transition-colors border-b border-gray-700"
@@ -83,7 +83,7 @@ export function ShellToolCallView({ toolCall, onApprove }: ShellToolCallViewProp
             <div>
               <div className="text-xs text-gray-400 mb-1">Output:</div>
               <div className="bg-gray-800 rounded p-2 border border-gray-700 max-h-60 overflow-auto">
-                <pre className="text-gray-100 whitespace-pre-wrap text-xs leading-relaxed">
+                <pre className="text-gray-100 whitespace-pre-wrap text-xs leading-relaxed font-mono">
                   {toolCall.output}
                 </pre>
               </div>
