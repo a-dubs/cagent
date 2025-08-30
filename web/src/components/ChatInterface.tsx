@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Send, Bot, User, Terminal, Brain, Wrench, Search, FileText } from 'lucide-react'
@@ -315,8 +315,87 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { isDark } = useTheme()
 
-  // Process messages to convert shell and think tool calls to use specialized components
-  const processedMessages = processMessagesForSpecializedTools(messages)
+  // Memoize the expensive message processing to avoid running on every render
+  const processedMessages = useMemo(() => 
+    processMessagesForSpecializedTools(messages), 
+    [messages]
+  )
+
+  // Memoize the filtered and flattened messages to avoid expensive operations on every render
+  const renderedMessages = useMemo(() => {
+    return processedMessages.filter(message => {
+      // Filter out tool messages since we handle them separately
+      if (message.role === 'tool') return false
+      return true
+    }).flatMap((message) => {
+      // For assistant messages, create unified bubbles when possible
+      if (message.role === 'assistant') {
+        const bubbles = []
+        const contentStr = Array.isArray(message.content) ? message.content.join('\n') : message.content
+        const hasContent = contentStr && contentStr.trim()
+        const hasPendingTools = message.pendingTools && message.pendingTools.length > 0
+        const hasCompletedTools = message.completedTools && message.completedTools.length > 0
+        
+        // Check if we can create a unified bubble (content + tools together)
+        const canUnify = hasContent && (hasPendingTools || hasCompletedTools)
+        
+        if (canUnify) {
+          // Create a single unified bubble with both content and tools
+          bubbles.push({
+            ...message,
+            id: `${message.id}-unified`,
+            isToolBubble: false,
+            isUnifiedMessage: true // Flag to indicate this has both content and tools
+          })
+        } else {
+          // Fall back to separate bubbles when no content or no tools
+          
+          // Add pending tool calls as separate bubbles
+          if (message.pendingTools && message.pendingTools.length > 0) {
+            message.pendingTools.forEach((tool) => {
+              bubbles.push({
+                ...message,
+                id: `${message.id}-pending-${tool.id}`,
+                content: '',
+                pendingTools: [tool],
+                completedTools: [],
+                isToolBubble: true
+              })
+            })
+          }
+          
+          // Add completed tool calls as separate bubbles
+          if (message.completedTools && message.completedTools.length > 0) {
+            message.completedTools.forEach((tool) => {
+              bubbles.push({
+                ...message,
+                id: `${message.id}-completed-${tool.id}`,
+                content: '',
+                pendingTools: [],
+                completedTools: [tool],
+                isToolBubble: true
+              })
+            })
+          }
+          
+          // Add final response bubble if there's content (and no tools to unify with)
+          if (hasContent && !hasPendingTools && !hasCompletedTools) {
+            bubbles.push({
+              ...message,
+              id: `${message.id}-content`,
+              pendingTools: [],
+              completedTools: [],
+              isToolBubble: false
+            })
+          }
+        }
+        
+        return bubbles.length > 0 ? bubbles : [message]
+      }
+      
+      return [message]
+    })
+  }, [processedMessages])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -341,18 +420,21 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
     }
   }
 
-  const adjustTextareaHeight = () => {
+  // Debounce textarea height adjustment to reduce DOM manipulation
+  const adjustTextareaHeight = useCallback(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = '60px'
       const scrollHeight = textareaRef.current.scrollHeight
       const maxHeight = 200 // max-h-[200px] = 200px
       textareaRef.current.style.height = Math.min(scrollHeight, maxHeight) + 'px'
     }
-  }
+  }, [])
 
+  // Use a timeout to debounce height adjustments
   useEffect(() => {
-    adjustTextareaHeight()
-  }, [input])
+    const timeoutId = setTimeout(adjustTextareaHeight, 10)
+    return () => clearTimeout(timeoutId)
+  }, [input, adjustTextareaHeight])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -361,14 +443,14 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
     }
   }
 
-  const ToolIcon = ({ name }: { name?: string }) => {
+  const ToolIcon = useCallback(({ name }: { name?: string }) => {
     const n = (name || '').toLowerCase()
     if (n.includes('shell') || n.includes('sh') || n.includes('cmd') || n.includes('script')) return <Terminal className="h-4 w-4" />
     if (n.includes('think') || n.includes('reason')) return <Brain className="h-4 w-4" />
     if (n.includes('search') || n.includes('grep') || n.includes('find')) return <Search className="h-4 w-4" />
     if (n.includes('file') || n.includes('read')) return <FileText className="h-4 w-4" />
     return <Wrench className="h-4 w-4" />
-  }
+  }, [])
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -381,78 +463,7 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
           </div>
         )}
         
-          {processedMessages.filter(message => {
-          // Filter out tool messages since we handle them separately
-          if (message.role === 'tool') return false
-          return true
-        }).flatMap((message) => {
-          // For assistant messages, create unified bubbles when possible
-          if (message.role === 'assistant') {
-            const bubbles = []
-            const contentStr = Array.isArray(message.content) ? message.content.join('\n') : message.content
-            const hasContent = contentStr && contentStr.trim()
-            const hasPendingTools = message.pendingTools && message.pendingTools.length > 0
-            const hasCompletedTools = message.completedTools && message.completedTools.length > 0
-            
-            // Check if we can create a unified bubble (content + tools together)
-            const canUnify = hasContent && (hasPendingTools || hasCompletedTools)
-            
-            if (canUnify) {
-              // Create a single unified bubble with both content and tools
-              bubbles.push({
-                ...message,
-                id: `${message.id}-unified`,
-                isToolBubble: false,
-                isUnifiedMessage: true // Flag to indicate this has both content and tools
-              })
-            } else {
-              // Fall back to separate bubbles when no content or no tools
-              
-              // Add pending tool calls as separate bubbles
-              if (message.pendingTools && message.pendingTools.length > 0) {
-                message.pendingTools.forEach((tool) => {
-                  bubbles.push({
-                    ...message,
-                    id: `${message.id}-pending-${tool.id}`,
-                    content: '',
-                    pendingTools: [tool],
-                    completedTools: [],
-                    isToolBubble: true
-                  })
-                })
-              }
-              
-              // Add completed tool calls as separate bubbles
-              if (message.completedTools && message.completedTools.length > 0) {
-                message.completedTools.forEach((tool) => {
-                  bubbles.push({
-                    ...message,
-                    id: `${message.id}-completed-${tool.id}`,
-                    content: '',
-                    pendingTools: [],
-                    completedTools: [tool],
-                    isToolBubble: true
-                  })
-                })
-              }
-              
-              // Add final response bubble if there's content (and no tools to unify with)
-              if (hasContent && !hasPendingTools && !hasCompletedTools) {
-                bubbles.push({
-                  ...message,
-                  id: `${message.id}-content`,
-                  pendingTools: [],
-                  completedTools: [],
-                  isToolBubble: false
-                })
-              }
-            }
-            
-            return bubbles.length > 0 ? bubbles : [message]
-          }
-          
-          return [message]
-        }).map((message) => (
+          {renderedMessages.map((message) => (
           <div
             key={message.id}
             className={`flex gap-3 ${
