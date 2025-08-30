@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark, oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import remarkBreaks from 'remark-breaks'
 
 interface EnhancedMarkdownProps {
   children: string
@@ -9,12 +10,14 @@ interface EnhancedMarkdownProps {
 }
 
 export function EnhancedMarkdown({ children, className = '', isDark = false }: EnhancedMarkdownProps) {
-  // Normalize newlines - convert \n to actual line breaks for better rendering
+  // Normalize newlines - convert escaped \n to actual newlines
+  // The remark-breaks plugin will handle converting single newlines to <br> tags
   const normalizedContent = children.replace(/\\n/g, '\n')
 
   return (
     <div className={`prose prose-sm max-w-none dark:prose-invert chat-message-prose ${className}`}>
       <ReactMarkdown
+        remarkPlugins={[remarkBreaks]}
         components={{
           // Enhanced code block rendering with syntax highlighting
           code({ node, inline, className, children, ...props }) {
@@ -81,6 +84,16 @@ export function EnhancedMarkdown({ children, className = '', isDark = false }: E
           // Better paragraph handling for newlines
           p({ children }) {
             return <p className="whitespace-pre-wrap">{children}</p>
+          },
+          
+          // Handle line breaks
+          br() {
+            return <br className="leading-relaxed" />
+          },
+          
+          // Handle text nodes with proper whitespace
+          text({ children }) {
+            return <span className="whitespace-pre-wrap">{children}</span>
           },
           
           // Enhanced blockquote styling
