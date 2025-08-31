@@ -21,6 +21,7 @@ export function AppLayout() {
   const [agentSetups, setAgentSetups] = useState<AgentSetup[]>([])
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false)
   const [isAgentMismatchWarningOpen, setIsAgentMismatchWarningOpen] = useState(false)
+  const [isLoadingSession, setIsLoadingSession] = useState(false)
   const [pendingFallbackSession, setPendingFallbackSession] = useState<{
     sessionResponse: SessionResponse
     session: Session
@@ -30,6 +31,24 @@ export function AppLayout() {
 
   // Check if we're in an active chat
   const isInChat = currentAgentSetup !== null
+
+  // Helper function to add session without duplicates
+  const addSessionToList = (newSession: Session) => {
+    setSessions(prev => {
+      // Check if session already exists
+      const existingIndex = prev.findIndex(s => s.id === newSession.id)
+      if (existingIndex >= 0) {
+        // Update existing session and move to front
+        const updated = [...prev]
+        updated[existingIndex] = newSession
+        updated.unshift(updated.splice(existingIndex, 1)[0])
+        return updated
+      } else {
+        // Add new session to front
+        return [newSession, ...prev]
+      }
+    })
+  }
 
   // Get current page from location
   const getCurrentPage = () => {
@@ -124,33 +143,74 @@ export function AppLayout() {
   }
 
   const handleSessionSelect = async (sessionId: string) => {
+    // Prevent multiple simultaneous session loads
+    if (isLoadingSession) {
+      console.log('Session load already in progress, skipping')
+      return
+    }
+    
+    // Don't reload if we're already on this session
+    if (currentSession?.id === sessionId) {
+      console.log('Already on this session, skipping reload')
+      return
+    }
+
+    setIsLoadingSession(true)
     try {
+      console.log('Loading session:', sessionId)
       const sessionResponse = await sessionApi.getSession(sessionId)
-      const session = sessions.find(s => s.id === sessionId)
+      let session = sessions.find(s => s.id === sessionId)
       
+      // If session not found in list, we need to get the agent filename from the sessions list API
       if (!session) {
-        console.error('Session not found in sessions list')
-        return
+        // Get the session info from the sessions list to get the agent filename
+        const allSessions = await sessionApi.getSessions()
+        const sessionFromList = allSessions.find(s => s.id === sessionId)
+        
+        session = {
+          id: sessionResponse.id,
+          title: sessionResponse.title || 'Untitled Chat',
+          created_at: sessionResponse.created_at || new Date().toISOString(),
+          num_messages: sessionResponse.messages?.length || 0,
+          input_tokens: sessionResponse.input_tokens || 0,
+          output_tokens: sessionResponse.output_tokens || 0,
+          most_recent_agent_filename: sessionFromList?.most_recent_agent_filename || 'unknown.yaml'
+        }
+        // Add to sessions list without duplicates
+        addSessionToList(session)
       }
 
-      // Find the agent setup for this session
-      const agentSetup = agentSetups.find(setup => 
-        setup.agent_config_path === session.most_recent_agent_filename
+      // Find or create agent setup for this session
+      let agentSetup = agentSetups.find(setup => 
+        setup.agent_config_path === session!.most_recent_agent_filename ||
+        setup.agent_config_path === session!.most_recent_agent_filename + '.yaml' ||
+        setup.name === session!.most_recent_agent_filename
       )
 
       if (!agentSetup) {
-        console.error('Agent setup not found for session')
-        return
+        // Create a temporary agent setup if not found
+        const agentName = session.most_recent_agent_filename.replace('.yaml', '')
+        agentSetup = {
+          id: Date.now(),
+          name: agentName,
+          description: 'Agent configuration',
+          agent_config_path: agentName + '.yaml',
+          working_directory: '/tmp',
+          environment_variables: {}
+        }
       }
 
       setCurrentSession(session)
       setCurrentAgentSetup(agentSetup)
-      setMessages(convertSessionMessagesToMessages(sessionResponse.messages))
+      setMessages(convertSessionMessagesToMessages(sessionResponse.messages || []))
       
       // Navigate to chat route
       navigate(`/chat/${sessionId}`)
+      console.log('Session loaded successfully:', sessionId, 'with agent:', session.most_recent_agent_filename)
     } catch (error) {
       console.error('Failed to load session:', error)
+    } finally {
+      setIsLoadingSession(false)
     }
   }
 
@@ -172,7 +232,7 @@ export function AppLayout() {
       }
       
       setCurrentSession(newSession)
-      setSessions(prev => [newSession, ...prev])
+      addSessionToList(newSession)
       setMessages([])
       
       navigate(`/chat/${newSession.id}`)
@@ -183,6 +243,42 @@ export function AppLayout() {
 
   const handleNewChat = () => {
     setIsNewChatModalOpen(true)
+  }
+
+  const handleCreateNewSession = async (agentFilename: string) => {
+    try {
+      const sessionResponse = await sessionApi.createSession(agentFilename)
+      const newSession: Session = {
+        id: sessionResponse.id,
+        title: sessionResponse.title,
+        created_at: sessionResponse.created_at,
+        num_messages: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        most_recent_agent_filename: agentFilename
+      }
+      
+      // Create a temporary agent setup for this session
+      const tempAgentSetup: AgentSetup = {
+        id: Date.now(), // Temporary ID
+        name: agentFilename.replace('.yaml', ''),
+        description: 'Agent configuration',
+        agent_config_path: agentFilename,
+        working_directory: '/tmp',
+        environment_variables: {}
+      }
+      
+      setCurrentSession(newSession)
+      setCurrentAgentSetup(tempAgentSetup)
+      addSessionToList(newSession)
+      setMessages([])
+      
+      navigate(`/chat/${newSession.id}`)
+      return newSession
+    } catch (error) {
+      console.error('Failed to create session:', error)
+      throw error
+    }
   }
 
   const handleSessionRename = async (sessionId: string, newTitle: string) => {
@@ -222,7 +318,13 @@ export function AppLayout() {
   }
 
   const sendMessage = async (content: string) => {
-    if (!currentSession || !currentAgentSetup) return
+    if (!currentSession || !currentAgentSetup) {
+      console.error('Cannot send message: missing session or agent setup', { 
+        hasSession: !!currentSession, 
+        hasAgentSetup: !!currentAgentSetup 
+      })
+      return
+    }
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -237,10 +339,22 @@ export function AppLayout() {
     try {
       sseController.current = new AbortController()
       
-      const response = await fetch(`/api/sessions/${currentSession.id}/chat`, {
+      // Extract agent filename from currentAgentSetup and remove .yaml extension if present
+      let agentFilename = currentAgentSetup.agent_config_path || currentAgentSetup.name || 'unknown'
+      if (agentFilename.endsWith('.yaml') || agentFilename.endsWith('.yml')) {
+        agentFilename = agentFilename.replace(/\.(yaml|yml)$/, '')
+      }
+      
+      // Format message according to backend expectations
+      const messages = [{
+        role: 'user',
+        content: content
+      }]
+      
+      const response = await fetch(`/api/sessions/${currentSession.id}/agent/${agentFilename}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: content }),
+        body: JSON.stringify(messages),
         signal: sseController.current.signal,
       })
 
@@ -276,7 +390,20 @@ export function AppLayout() {
             try {
               const data = JSON.parse(line.slice(6))
               
-              if (data.type === 'content') {
+              // Handle different event types from the backend
+              if (data.type === 'agent_choice' && data.choice?.delta?.content) {
+                // Backend sends streaming content in agent_choice events
+                assistantMessage = {
+                  ...assistantMessage,
+                  content: assistantMessage.content + data.choice.delta.content
+                }
+                setMessages(prev => {
+                  const newMessages = [...prev]
+                  newMessages[newMessages.length - 1] = assistantMessage
+                  return newMessages
+                })
+              } else if (data.type === 'content') {
+                // Fallback for direct content events
                 assistantMessage = {
                   ...assistantMessage,
                   content: assistantMessage.content + data.content
@@ -286,7 +413,17 @@ export function AppLayout() {
                   newMessages[newMessages.length - 1] = assistantMessage
                   return newMessages
                 })
+              } else if (data.type === 'session_title') {
+                // Update session title when received
+                if (currentSession && data.session_id === currentSession.id) {
+                  setCurrentSession(prev => prev ? { ...prev, title: data.title } : prev)
+                  setSessions(prev => prev.map(s => 
+                    s.id === data.session_id ? { ...s, title: data.title } : s
+                  ))
+                }
               }
+              // Log other event types for debugging
+              console.log('SSE Event:', data.type, data)
             } catch (e) {
               // Ignore JSON parsing errors for non-JSON lines
             }
@@ -359,7 +496,7 @@ export function AppLayout() {
       }
       
       setCurrentSession(newSession)
-      setSessions(prev => [newSession, ...prev])
+      addSessionToList(newSession)
       setMessages([])
       
       navigate(`/chat/${newSession.id}`)
@@ -390,6 +527,7 @@ export function AppLayout() {
     setMessages,
     isLoading,
     setIsLoading,
+    isLoadingSession,
     currentSession,
     setCurrentSession,
     selectedAgent,
@@ -409,6 +547,7 @@ export function AppLayout() {
     handleAgentSetupSelect,
     handleSessionSelect,
     handleNewChat,
+    handleCreateNewSession,
     handleSessionRename,
     handleSessionDelete,
     handleSessionToggleFavorite,
@@ -436,6 +575,8 @@ export function AppLayout() {
       <EnhancedNewChatModal
         isOpen={isNewChatModalOpen}
         onClose={() => setIsNewChatModalOpen(false)}
+        onNavigate={handleNavigate}
+        onCreateSession={handleCreateNewSession}
       />
 
       <AgentMismatchWarningModal

@@ -4,7 +4,7 @@ import { useAppContext } from '@/hooks/useAppContext'
 import { QuickStartGuide } from '@/components/QuickStartGuide'
 
 export function HomePage() {
-  const { agentSetups, handleAgentSetupSelect, handleNavigate } = useAppContext()
+  const { sessions, handleNavigate, handleSessionSelect, handleNewChat } = useAppContext()
   return (
     <div className="flex-1 overflow-y-auto bg-gradient-to-br from-background to-muted/20">
       <div className="max-w-6xl mx-auto p-8">
@@ -68,7 +68,21 @@ export function HomePage() {
         {/* Quick Actions */}
         <div className="bg-card border rounded-lg p-8 mb-8">
           <h2 className="text-2xl font-semibold mb-6">Get Started</h2>
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid md:grid-cols-3 gap-6">
+            <div>
+              <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
+                <MessageCircle className="h-5 w-5 text-primary" />
+                Start Chatting
+              </h3>
+              <p className="text-muted-foreground mb-4">
+                Begin a new conversation by selecting an AI agent and environment configuration.
+              </p>
+              <Button onClick={handleNewChat} className="w-full">
+                <Play className="h-4 w-4 mr-2" />
+                New Chat
+              </Button>
+            </div>
+
             <div>
               <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
                 <Bot className="h-5 w-5 text-primary" />
@@ -104,37 +118,40 @@ export function HomePage() {
           </div>
         </div>
 
-        {/* Recent Setups */}
-        {agentSetups.length > 0 && (
-          <div className="bg-card border rounded-lg p-8">
-            <h2 className="text-2xl font-semibold mb-6">Recent Agent Setups</h2>
+        {/* Recent Sessions */}
+        {sessions.length > 0 && (
+          <div className="bg-card border rounded-lg p-8 mb-8">
+            <h2 className="text-2xl font-semibold mb-6">Recent Chat Sessions</h2>
             <div className="grid gap-4">
-              {agentSetups.slice(0, 3).map((setup) => (
+              {sessions.slice(0, 3).map((session) => (
                 <div
-                  key={setup.id}
+                  key={session.id}
                   className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex-1">
-                    <h3 className="font-medium">{setup.name}</h3>
-                    <p className="text-sm text-muted-foreground">{setup.description}</p>
+                    <h3 className="font-medium">{session.title || 'Untitled Chat'}</h3>
+                    <p className="text-sm text-muted-foreground">
+                      {session.num_messages} messages • {new Date(session.created_at).toLocaleDateString()}
+                    </p>
                     <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                      <span>Working Dir: {setup.working_directory}</span>
-                      <span>•</span>
-                      <span>Env Vars: {Object.keys(setup.environment_variables || {}).length}</span>
+                      <span>Agent: {session.most_recent_agent_filename}</span>
                     </div>
                   </div>
                   <Button 
-                    onClick={() => handleAgentSetupSelect(setup)}
+                    onClick={() => handleSessionSelect(session.id)}
+                    variant="outline"
                     className="flex items-center gap-2"
                   >
-                    <Play className="h-4 w-4" />
-                    Start Chat
+                    <MessageCircle className="h-4 w-4" />
+                    Resume Chat
                   </Button>
                 </div>
               ))}
             </div>
           </div>
         )}
+
+
       </div>
     </div>
   )

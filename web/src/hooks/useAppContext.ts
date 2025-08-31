@@ -6,6 +6,7 @@ export interface AppContextType {
   setMessages: React.Dispatch<React.SetStateAction<Message[]>>
   isLoading: boolean
   setIsLoading: React.Dispatch<React.SetStateAction<boolean>>
+  isLoadingSession: boolean
   currentSession: Session | null
   setCurrentSession: React.Dispatch<React.SetStateAction<Session | null>>
   selectedAgent: string
@@ -25,6 +26,7 @@ export interface AppContextType {
   handleAgentSetupSelect: (setup: AgentSetup) => Promise<void>
   handleSessionSelect: (sessionId: string) => Promise<void>
   handleNewChat: () => void
+  handleCreateNewSession: (agentFilename: string) => Promise<any>
   handleSessionRename: (sessionId: string, newTitle: string) => Promise<void>
   handleSessionDelete: (sessionId: string) => Promise<void>
   handleSessionToggleFavorite: (sessionId: string) => void

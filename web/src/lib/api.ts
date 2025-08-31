@@ -1,4 +1,4 @@
-import { AgentSetup, CustomAgentPath, DirectoryBrowseResponse, Session, SessionResponse } from '@/types'
+import { AgentSetup, CustomAgentPath, DirectoryBrowseResponse, Session, SessionResponse, AgentConfiguration, EnvironmentSetup } from '@/types'
 
 const API_BASE = '/api'
 
@@ -88,11 +88,32 @@ export const directoryApi = {
   browseDirectories: (path?: string) => apiClient.get<DirectoryBrowseResponse>(`/directories${path ? `?path=${encodeURIComponent(path)}` : ''}`),
 }
 
+// Agent configuration API functions (new architecture)
+export const agentApi = {
+  getAgents: () => apiClient.get<AgentConfiguration[]>('/agents'),
+  getAgent: (id: string) => apiClient.get<AgentConfiguration>(`/agents/${id}`),
+  createAgent: (agent: AgentConfiguration) => apiClient.post<AgentConfiguration>('/agents', agent),
+  updateAgent: (id: string, agent: AgentConfiguration) => apiClient.put<AgentConfiguration>(`/agents/${id}`, agent),
+  deleteAgent: (id: string) => apiClient.delete(`/agents/${id}`),
+}
+
+// Environment setup API functions (new architecture)
+export const environmentApi = {
+  getEnvironments: () => apiClient.get<EnvironmentSetup[]>('/environments'),
+  getEnvironment: (id: number) => apiClient.get<EnvironmentSetup>(`/environments/${id}`),
+  createEnvironment: (env: EnvironmentSetup) => apiClient.post<EnvironmentSetup>('/environments', env),
+  updateEnvironment: (id: number, env: EnvironmentSetup) => apiClient.put<EnvironmentSetup>(`/environments/${id}`, env),
+  deleteEnvironment: (id: number) => apiClient.delete(`/environments/${id}`),
+}
+
 // Session management API functions
 export const sessionApi = {
   getSessions: () => apiClient.get<Session[]>('/sessions'),
   getSession: (sessionId: string) => apiClient.get<SessionResponse>(`/sessions/${sessionId}`),
   createSession: (agentFilename: string) => apiClient.post<SessionResponse>('/sessions', { agent_filename: agentFilename }),
+  // New method for creating sessions with agent + environment
+  createSessionWithConfig: (agentId: string, environmentId: number) => 
+    apiClient.post<SessionResponse>('/sessions', { agent_id: agentId, environment_id: environmentId }),
   updateSession: (sessionId: string, data: Partial<Session>) => 
     apiClient.put(`/sessions/${sessionId}`, data),
   updateSessionTitle: (sessionId: string, title: string) => 

@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ChatInterface } from '@/components/ChatInterface'
 import { ChatConfigurationPanel } from '@/components/ChatConfigurationPanel'
@@ -24,12 +24,15 @@ export function ChatPage() {
   // New state for agent/environment separation
   const [currentAgent, setCurrentAgent] = useState<AgentConfiguration | null>(null)
   const [currentEnvironment, setCurrentEnvironment] = useState<EnvironmentSetup | null>(null)
+  const lastSessionIdRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (sessionId && sessionId !== currentSession?.id) {
+    if (sessionId && sessionId !== lastSessionIdRef.current) {
+      console.log('ChatPage: Session ID changed, loading session:', sessionId)
+      lastSessionIdRef.current = sessionId
       handleSessionSelect(sessionId)
     }
-  }, [sessionId, currentSession?.id, handleSessionSelect])
+  }, [sessionId, handleSessionSelect])
 
   // Redirect to home if no session ID
   useEffect(() => {

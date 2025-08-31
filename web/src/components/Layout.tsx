@@ -231,9 +231,17 @@ export function Layout({
               
               {(() => {
                 const activeSessions = sessions.filter((session) => {
-                  // Filter out sessions that are likely empty
-                  // Keep sessions that have messages
-                  return session.num_messages > 0;
+                  // Keep sessions that have messages OR were created recently (within last hour)
+                  if (session.num_messages > 0) return true;
+                  
+                  // Also show recent sessions even if they have no messages yet
+                  if (session.created_at) {
+                    const sessionDate = new Date(session.created_at);
+                    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+                    return sessionDate > oneHourAgo;
+                  }
+                  
+                  return false;
                 });
                 
                 return activeSessions.length === 0 ? (

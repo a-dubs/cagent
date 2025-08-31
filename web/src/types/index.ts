@@ -205,7 +205,8 @@ export interface AgentConfiguration {
   model: string
   provider: string
   instruction: string
-  toolsets: string[]
+  toolsets: any[] // Array of toolset configurations from backend
+  toolset_display?: string // Human-readable string for display
   temperature?: number
   max_tokens?: number
   created_at?: string
