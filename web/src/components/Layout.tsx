@@ -58,8 +58,9 @@ export function Layout({
   const [isResizing, setIsResizing] = useState(false)
   const navItems = [
     { id: 'home', label: 'Home', icon: MessageCircle },
-    { id: 'setups', label: 'Agent Setups', icon: Bot },
+    { id: 'setups', label: 'Agents', icon: Bot },
     { id: 'agent-creator', label: 'Create Agent', icon: Plus },
+    { id: 'environments', label: 'Environments', icon: Settings },
     { id: 'configs', label: 'Config Manager', icon: Upload },
   ]
 

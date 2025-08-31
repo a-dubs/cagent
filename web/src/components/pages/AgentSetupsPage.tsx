@@ -1,11 +1,11 @@
 
 import { Button } from '@/components/ui/button'
-import { AgentSetupManager } from '@/components/AgentSetupManager'
+import { AgentConfigurationManager } from '@/components/AgentConfigurationManager'
 import { useAppContext } from '@/hooks/useAppContext'
-import { Plus } from 'lucide-react'
+import { Plus, Settings } from 'lucide-react'
 
 export function AgentSetupsPage() {
-  const { handleAgentSetupSelect, handleNavigate } = useAppContext()
+  const { handleNavigate } = useAppContext()
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="p-6">
@@ -13,22 +13,32 @@ export function AgentSetupsPage() {
           <div className="mb-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-semibold mb-2">Agent Setups</h1>
+                <h1 className="text-2xl font-semibold mb-2">AI Agents</h1>
                 <p className="text-muted-foreground">
-                  Create and manage your agent configurations, working directories, and environment variables.
+                  Manage your AI agent configurations. Agents define the AI model, instructions, and capabilities.
                 </p>
               </div>
-              <Button 
-                onClick={() => handleNavigate('agent-creator')}
-                className="flex items-center gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                Create Agent
-              </Button>
+              <div className="flex gap-2">
+                <Button 
+                  onClick={() => handleNavigate('environments')}
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Settings className="h-4 w-4" />
+                  Manage Environments
+                </Button>
+                <Button 
+                  onClick={() => handleNavigate('agent-creator')}
+                  className="flex items-center gap-2"
+                >
+                  <Plus className="h-4 w-4" />
+                  Create Agent
+                </Button>
+              </div>
             </div>
           </div>
           
-          <AgentSetupManager onSetupSelect={handleAgentSetupSelect} />
+          <AgentConfigurationManager />
         </div>
       </div>
     </div>

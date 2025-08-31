@@ -5,9 +5,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Plus, X, Save, Bot, Settings, Database, Terminal, FileText, Globe, Download, AlertCircle } from 'lucide-react'
+import { Save, Bot, Settings, Database, Terminal, FileText, Globe, Download, AlertCircle } from 'lucide-react'
 import { AgentConfigGenerator } from '@/components/AgentConfigGenerator'
 
 interface AgentFormData {
@@ -18,8 +18,6 @@ interface AgentFormData {
   provider: string
   temperature: number
   maxTokens: number
-  workingDirectory: string
-  environmentVariables: Record<string, string>
   toolsets: string[]
   addDate: boolean
 }
@@ -52,14 +50,10 @@ export function AgentCreatorForm({ templateData }: AgentCreatorFormProps) {
     provider: templateData?.provider || '',
     temperature: 0.7,
     maxTokens: 4096,
-    workingDirectory: templateData?.workingDirectory || '',
-    environmentVariables: templateData?.environmentVariables || {},
     toolsets: templateData?.toolsets || [],
     addDate: true
   })
 
-  const [newEnvKey, setNewEnvKey] = useState('')
-  const [newEnvValue, setNewEnvValue] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [generatedYAML, setGeneratedYAML] = useState<string>('')
@@ -68,27 +62,7 @@ export function AgentCreatorForm({ templateData }: AgentCreatorFormProps) {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
-  const addEnvironmentVariable = () => {
-    if (newEnvKey.trim() && newEnvValue.trim()) {
-      setFormData(prev => ({
-        ...prev,
-        environmentVariables: {
-          ...prev.environmentVariables,
-          [newEnvKey.trim()]: newEnvValue.trim()
-        }
-      }))
-      setNewEnvKey('')
-      setNewEnvValue('')
-    }
-  }
 
-  const removeEnvironmentVariable = (key: string) => {
-    setFormData(prev => {
-      const newEnvVars = { ...prev.environmentVariables }
-      delete newEnvVars[key]
-      return { ...prev, environmentVariables: newEnvVars }
-    })
-  }
 
   const toggleToolset = (toolsetId: string) => {
     setFormData(prev => ({
@@ -178,8 +152,6 @@ export function AgentCreatorForm({ templateData }: AgentCreatorFormProps) {
         provider: templateData.provider || '',
         temperature: 0.7,
         maxTokens: 4096,
-        workingDirectory: templateData.workingDirectory || '',
-        environmentVariables: templateData.environmentVariables || {},
         toolsets: templateData.toolsets || [],
         addDate: true
       })
@@ -395,69 +367,7 @@ export function AgentCreatorForm({ templateData }: AgentCreatorFormProps) {
         </CardContent>
       </Card>
 
-      {/* Environment Configuration */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Environment Configuration</CardTitle>
-          <CardDescription>
-            Set up the working directory and environment variables for your agent
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="workingDirectory">Working Directory</Label>
-            <Input
-              id="workingDirectory"
-              value={formData.workingDirectory}
-              onChange={(e) => handleInputChange('workingDirectory', e.target.value)}
-              placeholder="/tmp"
-            />
-          </div>
-          
-          <div className="space-y-4">
-            <Label>Environment Variables</Label>
-            
-            {/* Add new environment variable */}
-            <div className="flex gap-2">
-              <Input
-                value={newEnvKey}
-                onChange={(e) => setNewEnvKey(e.target.value)}
-                placeholder="Variable name"
-                className="flex-1"
-              />
-              <Input
-                value={newEnvValue}
-                onChange={(e) => setNewEnvValue(e.target.value)}
-                placeholder="Variable value"
-                className="flex-1"
-              />
-              <Button type="button" onClick={addEnvironmentVariable} size="sm">
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-            
-            {/* Display existing environment variables */}
-            {Object.entries(formData.environmentVariables).length > 0 && (
-              <div className="space-y-2">
-                {Object.entries(formData.environmentVariables).map(([key, value]) => (
-                  <div key={key} className="flex items-center gap-2 p-2 bg-muted rounded">
-                    <Badge variant="outline">{key}</Badge>
-                    <span className="text-sm flex-1">{value}</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeEnvironmentVariable(key)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+
 
       {/* YAML Preview */}
       {generatedYAML && (

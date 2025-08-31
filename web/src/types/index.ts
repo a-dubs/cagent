@@ -38,6 +38,9 @@ export interface Session {
   input_tokens: number
   output_tokens: number
   most_recent_agent_filename: string
+  // New fields for agent/environment separation
+  agent_config_id?: string
+  environment_setup_id?: number
   // For compatibility with existing code
   createdAt?: string
   updatedAt?: string
@@ -182,6 +185,34 @@ export interface AppSettings {
   theme: 'light' | 'dark' | 'system'
 }
 
+// Environment Setup - defines working environment for agents
+export interface EnvironmentSetup {
+  id?: number
+  name: string
+  description: string
+  working_directory: string
+  environment_variables: Record<string, string>
+  created_at?: string
+  updated_at?: string
+}
+
+// Agent Configuration - defines the AI agent itself
+export interface AgentConfiguration {
+  id?: string
+  name: string
+  description: string
+  config_filename: string
+  model: string
+  provider: string
+  instruction: string
+  toolsets: string[]
+  temperature?: number
+  max_tokens?: number
+  created_at?: string
+  updated_at?: string
+}
+
+// Legacy AgentSetup for backward compatibility (will be phased out)
 export interface AgentSetup {
   id?: number
   name: string

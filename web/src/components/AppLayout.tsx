@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { Message, Session, SessionResponse, SessionMessage, AgentSetup } from '@/types'
 import { apiClient, agentSetupApi, sessionApi } from '@/lib/api'
 import { Layout } from '@/components/Layout'
-import { NewChatModal } from '@/components/NewChatModal'
+import { EnhancedNewChatModal } from '@/components/EnhancedNewChatModal'
 import { AgentMismatchWarningModal } from '@/components/AgentMismatchWarningModal'
 
 export function AppLayout() {
@@ -38,6 +38,7 @@ export function AppLayout() {
     if (path.startsWith('/chat/')) return 'chat'
     if (path === '/agents') return 'setups'
     if (path === '/agents/create') return 'agent-creator'
+    if (path === '/environments') return 'environments'
     if (path === '/configs') return 'configs'
     return 'home'
   }
@@ -107,6 +108,9 @@ export function AppLayout() {
         break
       case 'setups':
         navigate('/agents')
+        break
+      case 'environments':
+        navigate('/environments')
         break
       case 'configs':
         navigate('/configs')
@@ -429,15 +433,9 @@ export function AppLayout() {
         <Outlet context={appContext} />
       </Layout>
 
-      <NewChatModal
+      <EnhancedNewChatModal
         isOpen={isNewChatModalOpen}
         onClose={() => setIsNewChatModalOpen(false)}
-        agentSetups={agentSetups}
-        onSetupSelect={handleAgentSetupSelect}
-        onCreateSetup={() => {
-          setIsNewChatModalOpen(false)
-          navigate('/agents/create')
-        }}
       />
 
       <AgentMismatchWarningModal

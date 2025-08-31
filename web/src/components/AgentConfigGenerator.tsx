@@ -9,8 +9,6 @@ interface AgentCreationData {
   temperature?: number
   maxTokens?: number
   toolsets: string[]
-  workingDirectory: string
-  environmentVariables: Record<string, string>
   addDate?: boolean
 }
 

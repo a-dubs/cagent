@@ -1,8 +1,10 @@
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ChatInterface } from '@/components/ChatInterface'
+import { ChatConfigurationPanel } from '@/components/ChatConfigurationPanel'
 import { useAppContext } from '@/hooks/useAppContext'
+import { AgentConfiguration, EnvironmentSetup } from '@/types'
 
 export function ChatPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
@@ -18,6 +20,10 @@ export function ChatPage() {
     handleStartSession,
     handleSessionSelect
   } = useAppContext()
+
+  // New state for agent/environment separation
+  const [currentAgent, setCurrentAgent] = useState<AgentConfiguration | null>(null)
+  const [currentEnvironment, setCurrentEnvironment] = useState<EnvironmentSetup | null>(null)
 
   useEffect(() => {
     if (sessionId && sessionId !== currentSession?.id) {
@@ -36,24 +42,40 @@ export function ChatPage() {
       {/* Chat Header */}
       <div className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0">
         <div className="px-6 py-3">
-          <div className="flex items-center gap-4">
-            <div>
-              <h2 className="font-semibold">{currentAgentSetup?.name || 'Chat Session'}</h2>
-              {currentAgentSetup && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div>
+                <h2 className="font-semibold">{currentAgent?.name || currentAgentSetup?.name || 'Chat Session'}</h2>
                 <div className="text-sm text-muted-foreground">
-                  {currentAgentSetup.description}
+                  {currentAgent?.description || currentAgentSetup?.description}
                 </div>
-              )}
+              </div>
             </div>
+            
+            {currentSession && (
+              <ChatConfigurationPanel
+                currentSession={currentSession}
+                currentAgent={currentAgent}
+                currentEnvironment={currentEnvironment}
+                onAgentChange={(agent) => {
+                  setCurrentAgent(agent)
+                  console.log('Agent changed to:', agent.name)
+                }}
+                onEnvironmentChange={(env) => {
+                  setCurrentEnvironment(env)
+                  console.log('Environment changed to:', env.name)
+                }}
+              />
+            )}
           </div>
           
-          {currentAgentSetup && (
-            <div className="mt-2 text-xs text-muted-foreground flex items-center gap-4">
-              <span>Working Dir: {currentAgentSetup.working_directory}</span>
-              <span>•</span>
-              <span>Env Vars: {Object.keys(currentAgentSetup.environment_variables).length}</span>
-            </div>
-          )}
+          <div className="mt-2 text-xs text-muted-foreground flex items-center gap-4">
+            <span>Agent: {currentAgent?.model || currentAgentSetup?.name || 'Unknown'}</span>
+            <span>•</span>
+            <span>Environment: {currentEnvironment?.name || 'Default'}</span>
+            <span>•</span>
+            <span>Working Dir: {currentEnvironment?.working_directory || currentAgentSetup?.working_directory || '/tmp'}</span>
+          </div>
         </div>
       </div>
 

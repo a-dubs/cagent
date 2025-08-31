@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { MessageCircle, Bot, Upload, Play, Zap, Shield, Clock } from 'lucide-react'
+import { MessageCircle, Bot, Play, Zap, Shield, Clock, Settings } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { QuickStartGuide } from '@/components/QuickStartGuide'
 
@@ -72,10 +72,10 @@ export function HomePage() {
             <div>
               <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
                 <Bot className="h-5 w-5 text-primary" />
-                Agent Setups
+                AI Agents
               </h3>
               <p className="text-muted-foreground mb-4">
-                Create and manage agent configurations with custom working directories, environment variables, and tool access.
+                Create and manage AI agent configurations that define model behavior, instructions, and capabilities.
               </p>
               <div className="space-y-2">
                 <Button onClick={() => handleNavigate('agent-creator')} className="w-full">
@@ -83,22 +83,22 @@ export function HomePage() {
                   Create New Agent
                 </Button>
                 <Button onClick={() => handleNavigate('setups')} variant="outline" className="w-full">
-                  Manage Existing Setups
+                  Manage Agents
                 </Button>
               </div>
             </div>
 
             <div>
               <h3 className="text-lg font-medium mb-3 flex items-center gap-2">
-                <Upload className="h-5 w-5 text-primary" />
-                Configuration Files
+                <Settings className="h-5 w-5 text-primary" />
+                Environments
               </h3>
               <p className="text-muted-foreground mb-4">
-                Upload and organize agent configuration files that define models, toolsets, and behavior patterns.
+                Manage working environments with custom directories and environment variables that can be used with any agent.
               </p>
-              <Button onClick={() => handleNavigate('configs')} variant="outline" className="w-full">
-                <Upload className="h-4 w-4 mr-2" />
-                Manage Configurations
+              <Button onClick={() => handleNavigate('environments')} variant="outline" className="w-full">
+                <Settings className="h-4 w-4 mr-2" />
+                Manage Environments
               </Button>
             </div>
           </div>
