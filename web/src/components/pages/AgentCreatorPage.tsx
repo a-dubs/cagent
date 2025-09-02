@@ -14,12 +14,23 @@ export function AgentCreatorPage() {
   const { handleNavigate } = useAppContext()
   const [activeTab, setActiveTab] = useState('form')
   const [templateData, setTemplateData] = useState(null)
+  const [editingAgent, setEditingAgent] = useState<{
+    name: string
+    path: string
+    description?: string
+  } | null>(null)
 
   useEffect(() => {
     // Check if we have template data from navigation state
     if (location.state?.templateData) {
       setTemplateData(location.state.templateData)
       setActiveTab(location.state.activeTab || 'form')
+    }
+    
+    // Check if we have editing agent data from navigation state
+    if (location.state?.editingAgent) {
+      setEditingAgent(location.state.editingAgent)
+      setActiveTab('assistant') // Default to AI assistant for editing
     }
   }, [location.state])
 
@@ -43,10 +54,13 @@ export function AgentCreatorPage() {
                 <div className="p-2 bg-primary/10 rounded-lg">
                   <Wand2 className="h-6 w-6 text-primary" />
                 </div>
-                Create New Agent
+                {editingAgent ? `Edit Agent: ${editingAgent.name}` : 'Create New Agent'}
               </h1>
               <p className="text-muted-foreground mt-2">
-                Build intelligent agents with custom capabilities, models, and toolsets - no YAML required
+                {editingAgent 
+                  ? 'Modify and improve your existing agent configuration'
+                  : 'Build intelligent agents with custom capabilities, models, and toolsets - no YAML required'
+                }
               </p>
             </div>
           </div>
@@ -114,7 +128,7 @@ export function AgentCreatorPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <AgentAssistant />
+                  <AgentAssistant editingAgent={editingAgent || undefined} />
                 </CardContent>
               </Card>
             </TabsContent>

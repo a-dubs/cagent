@@ -2,9 +2,24 @@ import { Button } from '@/components/ui/button'
 import { MessageCircle, Bot, Play, Zap, Shield, Clock, Settings } from 'lucide-react'
 import { useAppContext } from '@/hooks/useAppContext'
 import { QuickStartGuide } from '@/components/QuickStartGuide'
+import { useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 
 export function HomePage() {
   const { sessions, handleNavigate, handleSessionSelect, handleNewChat } = useAppContext()
+  const location = useLocation()
+
+  // Check for newAgent parameter and auto-open new chat modal
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search)
+    const newAgentName = searchParams.get('newAgent')
+    
+    if (newAgentName) {
+      // Clear the URL parameter and open new chat modal
+      window.history.replaceState({}, '', window.location.pathname)
+      handleNewChat()
+    }
+  }, [location.search, handleNewChat])
   return (
     <div className="flex-1 overflow-y-auto bg-gradient-to-br from-background to-muted/20">
       <div className="max-w-6xl mx-auto p-8">

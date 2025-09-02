@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -11,6 +12,7 @@ interface AgentConfigurationManagerProps {
 
 export function AgentConfigurationManager({ onAgentSelect }: AgentConfigurationManagerProps) {
   const [agents, setAgents] = useState<AgentConfiguration[]>([])
+  const navigate = useNavigate()
 
   useEffect(() => {
     loadAgentConfigurations()
@@ -119,7 +121,15 @@ models:
                   <Button
                     size="sm"
                     variant="ghost"
-                    onClick={() => {/* TODO: Edit agent */}}
+                    onClick={() => navigate('/agent-creator', { 
+                      state: { 
+                        editingAgent: {
+                          name: agent.name,
+                          path: agent.path || agent.config_filename,
+                          description: agent.description
+                        }
+                      }
+                    })}
                     title="Edit agent"
                   >
                     <Edit className="h-4 w-4" />

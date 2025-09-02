@@ -36,14 +36,15 @@ import (
 )
 
 type Server struct {
-	e            *echo.Echo
-	logger       *slog.Logger
-	runtimes     map[string]*runtime.Runtime
-	sessionStore session.Store
-	agentsDir    string
-	runConfig    latest.RuntimeConfig
-	teams        map[string]*team.Team
-	autoRunTools bool
+	e               *echo.Echo
+	logger          *slog.Logger
+	runtimes        map[string]*runtime.Runtime
+	sessionStore    session.Store
+	agentsDir       string // Built-in/example agents directory
+	customAgentsDir string // User-created agents directory
+	runConfig       latest.RuntimeConfig
+	teams           map[string]*team.Team
+	autoRunTools    bool
 }
 
 type Opt func(*Server)
@@ -58,6 +59,12 @@ func WithFrontend(fsys fs.FS) Opt {
 func WithAgentsDir(dir string) Opt {
 	return func(s *Server) {
 		s.agentsDir = dir
+	}
+}
+
+func WithCustomAgentsDir(dir string) Opt {
+	return func(s *Server) {
+		s.customAgentsDir = dir
 	}
 }
 
@@ -174,10 +181,40 @@ type editAgentConfigRequest struct {
 }
 
 func (s *Server) getAgentConfig(c echo.Context) error {
-	path := filepath.Join(s.agentsDir, c.Param("id"))
-	if !strings.HasSuffix(path, ".yaml") {
-		path += ".yaml"
+	agentID := c.Param("id")
+
+	// Try to find the agent in both directories
+	var path string
+	var found bool
+
+	// First try built-in agents directory
+	if s.agentsDir != "" {
+		candidatePath := filepath.Join(s.agentsDir, agentID)
+		if !strings.HasSuffix(candidatePath, ".yaml") {
+			candidatePath += ".yaml"
+		}
+		if _, err := os.Stat(candidatePath); err == nil {
+			path = candidatePath
+			found = true
+		}
 	}
+
+	// If not found, try custom agents directory
+	if !found && s.customAgentsDir != "" {
+		candidatePath := filepath.Join(s.customAgentsDir, agentID)
+		if !strings.HasSuffix(candidatePath, ".yaml") {
+			candidatePath += ".yaml"
+		}
+		if _, err := os.Stat(candidatePath); err == nil {
+			path = candidatePath
+			found = true
+		}
+	}
+
+	if !found {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "agent not found"})
+	}
+
 	cfg, err := config.LoadConfig(path)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "agent not found"})
@@ -289,7 +326,19 @@ func (s *Server) createAgent(c echo.Context) error {
 	}
 	prompt := req.Prompt
 
-	out, path, err := creator.CreateAgent(c.Request().Context(), s.agentsDir, s.logger, prompt, s.runConfig)
+	// Use custom agents directory for user-created agents
+	targetDir := s.customAgentsDir
+	if targetDir == "" {
+		targetDir = s.agentsDir // Fallback to main directory if custom not set
+	}
+
+	// Ensure the custom agents directory exists
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		s.logger.Error("Failed to create custom agents directory", "dir", targetDir, "error", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create agents directory"})
+	}
+
+	out, path, err := creator.CreateAgent(c.Request().Context(), targetDir, s.logger, prompt, s.runConfig)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create agent"})
 	}
@@ -341,11 +390,23 @@ func (s *Server) createAgentConfig(c echo.Context) error {
 	description := req.Description
 	instruction := req.Instruction
 
+	// Use custom agents directory for user-created agents
+	targetDir := s.customAgentsDir
+	if targetDir == "" {
+		targetDir = s.agentsDir // Fallback to main directory if custom not set
+	}
+
+	// Ensure the custom agents directory exists
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		s.logger.Error("Failed to create custom agents directory", "dir", targetDir, "error", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create agents directory"})
+	}
+
 	// Check if file already exists and generate alternative name if needed
 	originalFilename := filename
 	counter := 1
 	for {
-		path := filepath.Join(s.agentsDir, filename+".yaml")
+		path := filepath.Join(targetDir, filename+".yaml")
 		if _, err := os.Stat(path); os.IsNotExist(err) {
 			break
 		}
@@ -384,8 +445,8 @@ func (s *Server) createAgentConfig(c echo.Context) error {
 	shebang := "#!/usr/bin/env cagent run\nversion: \"1\"\n\n"
 	finalContent := shebang + string(yamlData)
 
-	// Write the file to the agents directory
-	targetPath := filepath.Join(s.agentsDir, filename)
+	// Write the file to the target directory
+	targetPath := filepath.Join(targetDir, filename)
 	if !strings.HasSuffix(targetPath, ".yaml") && !strings.HasSuffix(targetPath, ".yml") {
 		targetPath += ".yaml"
 	}
@@ -740,29 +801,57 @@ func (s *Server) deleteAgent(c echo.Context) error {
 }
 
 func (s *Server) getAgents(c echo.Context) error {
-	// List agent YAML files from disk without loading providers/models
-	if s.agentsDir == "" {
-		return c.JSON(http.StatusOK, []map[string]string{})
-	}
-
-	entries, err := os.ReadDir(s.agentsDir)
-	if err != nil {
-		s.logger.Error("Failed to read agents directory", "dir", s.agentsDir, "error", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list agents"})
-	}
-
 	agentList := make([]map[string]string, 0)
-	for _, e := range entries {
-		if e.IsDir() || (!strings.HasSuffix(e.Name(), ".yaml") && !strings.HasSuffix(e.Name(), ".yml")) {
-			continue
+
+	// Add built-in agents from the main agents directory
+	if s.agentsDir != "" {
+		entries, err := os.ReadDir(s.agentsDir)
+		if err != nil {
+			s.logger.Error("Failed to read built-in agents directory", "dir", s.agentsDir, "error", err)
+		} else {
+			for _, e := range entries {
+				if e.IsDir() || (!strings.HasSuffix(e.Name(), ".yaml") && !strings.HasSuffix(e.Name(), ".yml")) {
+					continue
+				}
+				name := e.Name()
+				name = strings.TrimSuffix(name, filepath.Ext(name))
+				agentList = append(agentList, map[string]string{
+					"name":        name,
+					"description": name,
+					"category":    "built-in",
+					"path":        filepath.Join(s.agentsDir, e.Name()),
+				})
+			}
 		}
-		name := e.Name()
-		name = strings.TrimSuffix(name, filepath.Ext(name))
-		agentList = append(agentList, map[string]string{
-			"name":        name,
-			"description": name,
-		})
 	}
+
+	// Add custom agents from the custom agents directory
+	if s.customAgentsDir != "" {
+		// Ensure custom agents directory exists
+		if err := os.MkdirAll(s.customAgentsDir, 0755); err != nil {
+			s.logger.Error("Failed to create custom agents directory", "dir", s.customAgentsDir, "error", err)
+		} else {
+			entries, err := os.ReadDir(s.customAgentsDir)
+			if err != nil {
+				s.logger.Error("Failed to read custom agents directory", "dir", s.customAgentsDir, "error", err)
+			} else {
+				for _, e := range entries {
+					if e.IsDir() || (!strings.HasSuffix(e.Name(), ".yaml") && !strings.HasSuffix(e.Name(), ".yml")) {
+						continue
+					}
+					name := e.Name()
+					name = strings.TrimSuffix(name, filepath.Ext(name))
+					agentList = append(agentList, map[string]string{
+						"name":        name,
+						"description": name,
+						"category":    "custom",
+						"path":        filepath.Join(s.customAgentsDir, e.Name()),
+					})
+				}
+			}
+		}
+	}
+
 	return c.JSON(http.StatusOK, agentList)
 }
 
@@ -897,21 +986,44 @@ func (s *Server) runAgent(c echo.Context) error {
 	// Load the team lazily if not already loaded
 	t, exists := s.teams[agentFilename]
 	if !exists {
-		// Resolve path and try to load
+		// Resolve path by searching in both directories
 		var path string
-		if strings.HasSuffix(agentFilename, ".yaml") || strings.HasSuffix(agentFilename, ".yml") {
-			path = filepath.Join(s.agentsDir, agentFilename)
-		} else {
-			path = filepath.Join(s.agentsDir, agentFilename+".yaml")
-		}
-		// Check if file exists, try .yml fallback
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			alt := filepath.Join(s.agentsDir, agentFilename+".yml")
-			if _, err2 := os.Stat(alt); err2 == nil {
-				path = alt
-			} else {
-				return c.JSON(http.StatusNotFound, map[string]string{"error": "agent not found"})
+		var found bool
+
+		// Helper function to try different extensions
+		tryPath := func(basePath string) bool {
+			candidates := []string{basePath}
+			if !strings.HasSuffix(agentFilename, ".yaml") && !strings.HasSuffix(agentFilename, ".yml") {
+				candidates = append(candidates, basePath+".yaml", basePath+".yml")
 			}
+
+			for _, candidate := range candidates {
+				if _, err := os.Stat(candidate); err == nil {
+					path = candidate
+					return true
+				}
+			}
+			return false
+		}
+
+		// First try built-in agents directory
+		if s.agentsDir != "" {
+			basePath := filepath.Join(s.agentsDir, agentFilename)
+			if tryPath(basePath) {
+				found = true
+			}
+		}
+
+		// If not found, try custom agents directory
+		if !found && s.customAgentsDir != "" {
+			basePath := filepath.Join(s.customAgentsDir, agentFilename)
+			if tryPath(basePath) {
+				found = true
+			}
+		}
+
+		if !found {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "agent not found"})
 		}
 		// Load team now
 		teamLoaded, err := teamloader.Load(c.Request().Context(), path, s.runConfig, s.logger)

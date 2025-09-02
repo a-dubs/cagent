@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Bot, Play, Plus, FolderOpen } from 'lucide-react'
+import { Bot, Play, Plus, FolderOpen, Edit } from 'lucide-react'
 import { AgentConfiguration, EnvironmentSetup } from '@/types'
 import { apiClient } from '@/lib/api'
 
@@ -25,6 +26,7 @@ export function EnhancedNewChatModal({
   const [agents, setAgents] = useState<AgentConfiguration[]>([])
   const [environments, setEnvironments] = useState<EnvironmentSetup[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (isOpen) {
@@ -35,8 +37,8 @@ export function EnhancedNewChatModal({
 
   const loadAgents = async () => {
     try {
-      // First get the list of agent names
-      const agentList = await apiClient.get<{name: string, description: string}[]>('/agents')
+      // Get the list of agents with category information
+      const agentList = await apiClient.get<{name: string, description: string, category: string, path?: string}[]>('/agents')
       console.log('Agent list from API:', agentList)
       
       if (!Array.isArray(agentList)) {
@@ -72,6 +74,8 @@ export function EnhancedNewChatModal({
             id: agentSummary.name,
             name: agentSummary.name,
             description: rootAgent.description || agentSummary.description || 'No description available',
+            category: (agentSummary.category as 'built-in' | 'custom') || 'built-in',
+            path: agentSummary.path,
             model: modelName,
             provider: provider,
             toolsets: toolsets,
@@ -87,6 +91,8 @@ export function EnhancedNewChatModal({
             id: agentSummary.name,
             name: agentSummary.name,
             description: agentSummary.description || 'No description available',
+            category: (agentSummary.category as 'built-in' | 'custom') || 'built-in',
+            path: agentSummary.path,
             model: 'Unknown',
             provider: 'Unknown',
             toolsets: [],
@@ -246,43 +252,124 @@ export function EnhancedNewChatModal({
                     </Button>
                   </div>
 
-                  <div className="grid gap-3 max-h-60 overflow-y-auto">
-                    {agents.map((agent) => (
-                      <Card 
-                        key={agent.id}
-                        className={`cursor-pointer transition-colors ${
-                          selectedAgent?.id === agent.id 
-                            ? 'border-primary bg-primary/5' 
-                            : 'hover:border-primary/50'
-                        }`}
-                        onClick={() => setSelectedAgent(agent)}
-                      >
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <h4 className="font-medium flex items-center gap-2">
-                                <Bot className="h-4 w-4 text-primary" />
-                                {agent.name}
-                              </h4>
-                              <p className="text-sm text-muted-foreground mt-1">{agent.description}</p>
-                              <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
-                                <span>Model: {agent.model || 'Unknown'}</span>
-                                <span>•</span>
-                                <span>Provider: {agent.provider || 'Unknown'}</span>
-                                <span>•</span>
-                                <span>Tools: {agent.toolset_display || 'None'}</span>
-                              </div>
-                            </div>
-                            {selectedAgent?.id === agent.id && (
-                              <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
-                                <div className="w-2 h-2 rounded-full bg-white"></div>
-                              </div>
-                            )}
+                  {/* Nested tabs for agent categories */}
+                  <Tabs defaultValue="custom" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="custom">My Agents ({agents.filter(a => a.category === 'custom').length})</TabsTrigger>
+                      <TabsTrigger value="built-in">Built-in ({agents.filter(a => a.category === 'built-in').length})</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="custom" className="space-y-4">
+                      <div className="grid gap-3 max-h-60 overflow-y-auto">
+                        {agents.filter(agent => agent.category === 'custom').length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <Bot className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                            <p className="text-sm">No custom agents yet</p>
+                            <p className="text-xs">Create your first custom agent to get started</p>
                           </div>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </div>
+                        ) : (
+                          agents.filter(agent => agent.category === 'custom').map((agent) => (
+                            <Card 
+                              key={agent.id}
+                              className={`cursor-pointer transition-colors group ${
+                                selectedAgent?.id === agent.id 
+                                  ? 'border-primary bg-primary/5' 
+                                  : 'hover:border-primary/50'
+                              }`}
+                              onClick={() => setSelectedAgent(agent)}
+                            >
+                              <CardContent className="p-4">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <h4 className="font-medium flex items-center gap-2">
+                                      <Bot className="h-4 w-4 text-primary" />
+                                      {agent.name}
+                                    </h4>
+                                    <p className="text-sm text-muted-foreground mt-1">{agent.description}</p>
+                                    <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                                      <span>Model: {agent.model || 'Unknown'}</span>
+                                      <span>•</span>
+                                      <span>Provider: {agent.provider || 'Unknown'}</span>
+                                      <span>•</span>
+                                      <span>Tools: {agent.toolset_display || 'None'}</span>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        onClose()
+                                        navigate('/agent-creator', { 
+                                          state: { 
+                                            editingAgent: {
+                                              name: agent.name,
+                                              path: agent.path || agent.config_filename,
+                                              description: agent.description
+                                            }
+                                          }
+                                        })
+                                      }}
+                                      title="Edit agent"
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <Edit className="h-3 w-3" />
+                                    </Button>
+                                    {selectedAgent?.id === agent.id && (
+                                      <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                                        <div className="w-2 h-2 rounded-full bg-white"></div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          ))
+                        )}
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="built-in" className="space-y-4">
+                      <div className="grid gap-3 max-h-60 overflow-y-auto">
+                        {agents.filter(agent => agent.category === 'built-in').map((agent) => (
+                          <Card 
+                            key={agent.id}
+                            className={`cursor-pointer transition-colors ${
+                              selectedAgent?.id === agent.id 
+                                ? 'border-primary bg-primary/5' 
+                                : 'hover:border-primary/50'
+                            }`}
+                            onClick={() => setSelectedAgent(agent)}
+                          >
+                            <CardContent className="p-4">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <h4 className="font-medium flex items-center gap-2">
+                                    <Bot className="h-4 w-4 text-blue-500" />
+                                    {agent.name}
+                                  </h4>
+                                  <p className="text-sm text-muted-foreground mt-1">{agent.description}</p>
+                                  <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                                    <span>Model: {agent.model || 'Unknown'}</span>
+                                    <span>•</span>
+                                    <span>Provider: {agent.provider || 'Unknown'}</span>
+                                    <span>•</span>
+                                    <span>Tools: {agent.toolset_display || 'None'}</span>
+                                  </div>
+                                </div>
+                                {selectedAgent?.id === agent.id && (
+                                  <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                                    <div className="w-2 h-2 rounded-full bg-white"></div>
+                                  </div>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </TabsContent>
 
                 <TabsContent value="environment" className="space-y-4">

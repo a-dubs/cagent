@@ -202,6 +202,8 @@ export interface AgentConfiguration {
   name: string
   description: string
   config_filename: string
+  category?: 'built-in' | 'custom' // Category to distinguish agent types
+  path?: string // Full path to the agent file
   model: string
   provider: string
   instruction: string

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -94,6 +95,16 @@ func runWeb(cmd *cobra.Command, args []string) error {
 	}
 	if stat.IsDir() {
 		opts = append(opts, server.WithAgentsDir(agentsPath))
+
+		// Set up custom agents directory in user's home directory
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			logger.Warn("Failed to get user home directory, custom agents will be stored with built-in agents", "error", err)
+		} else {
+			customAgentsDir := filepath.Join(homeDir, ".cagent", "agents")
+			opts = append(opts, server.WithCustomAgentsDir(customAgentsDir))
+			logger.Debug("Custom agents directory configured", "path", customAgentsDir)
+		}
 	}
 
 	// Add web frontend

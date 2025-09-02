@@ -37,6 +37,6 @@
   - [X] do the same for shell tool call component
 - [ ] EVENTUALLY: overhaul all text to be way more standardized and consistent.
 - [X] make most recent/currently active tool call bubble automatically expand to show the full tool call and output and then collapse once it is no longer the most recent/active tool call. for past chats, all tool call bubbles should be collapsed by default.
-- [ ] can you make it so that pre-provided agents from the cagents repo are distinguishable from user created/user imported ones? as such, store user created agents in a different path on the system to make it easier to distinguish. 
+- [ ] 
 
 

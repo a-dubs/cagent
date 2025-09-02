@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Bot, Send, User, Sparkles, CheckCircle, Copy } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Bot, Send, User, Sparkles, CheckCircle } from 'lucide-react'
+import { apiClient } from '@/lib/api'
 
 
 interface ChatMessage {
@@ -13,14 +14,35 @@ interface ChatMessage {
   agentConfig?: any
 }
 
-export function AgentCreationAssistant() {
+interface AgentCreationAssistantProps {
+  editingAgent?: {
+    name: string
+    path: string
+    description?: string
+  }
+}
+
+export function AgentCreationAssistant({ editingAgent }: AgentCreationAssistantProps = {}) {
   const navigate = useNavigate()
   
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       role: 'assistant',
-      content: `Hello! I'm your AI assistant for creating custom agents. I can help you design the perfect agent for your needs.
+      content: editingAgent 
+        ? `Hello! I'm here to help you modify the **${editingAgent.name}** agent.
+
+**Current Agent:** \`${editingAgent.path}\`
+${editingAgent.description ? `**Description:** ${editingAgent.description}` : ''}
+
+Tell me what changes you'd like to make:
+• Modify the agent's capabilities or behavior
+• Add or remove tools and features  
+• Change the model or provider
+• Update instructions or constraints
+
+I'll help you iterate and improve your agent configuration.`
+        : `Hello! I'm your AI assistant for creating custom agents. I can help you design the perfect agent for your needs.
 
 Tell me:
 • What tasks should your agent handle?
@@ -57,172 +79,103 @@ I'll guide you through the process and generate a complete agent configuration.`
     setInput('')
     setIsLoading(true)
 
-    // Simulate AI response with agent configuration generation
-    setTimeout(() => {
-      const assistantResponse = generateAIResponse(userMessage.content, messages)
-      setMessages(prev => [...prev, assistantResponse])
-      setIsLoading(false)
-    }, 1500)
-  }
-
-  const generateAIResponse = (userInput: string, _chatHistory: ChatMessage[]): ChatMessage => {
-    const lowerInput = userInput.toLowerCase()
-    
-    // Analyze user input and generate appropriate response
-    if (lowerInput.includes('code') || lowerInput.includes('programming') || lowerInput.includes('development')) {
-      const config = {
-        name: 'Custom Code Assistant',
-        description: 'AI-powered coding assistant tailored to your needs',
-        instruction: `You are an expert software developer and coding assistant. Help users with:
-- Writing clean, efficient code
-- Debugging and troubleshooting
-- Code reviews and best practices
-- Architecture decisions
-- Testing strategies
-
-Always provide clear explanations and consider edge cases.`,
-        model: 'gpt-4',
-        provider: 'openai',
-        toolsets: ['shell', 'file'],
-        workingDirectory: '/workspace',
-        environmentVariables: { 'NODE_ENV': 'development' }
-      }
-
-      return {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: `Based on your request for coding assistance, I've designed a specialized code assistant agent for you.
-
-**Agent Overview:**
-- **Name:** ${config.name}
-- **Purpose:** Help with programming tasks, debugging, and development workflows
-- **Model:** ${config.model} (${config.provider})
-
-**Capabilities:**
-- File system access for reading/writing code
-- Shell command execution for testing and building
-- Code analysis and debugging
-- Best practices guidance
-
-**Working Environment:**
-- Directory: ${config.workingDirectory}
-- Environment: Development mode enabled
-
-This agent will be perfect for software development tasks. Would you like me to create this agent for you, or would you like to modify anything?`,
-        timestamp: new Date().toISOString(),
-        agentConfig: config
-      }
-    }
-
-    if (lowerInput.includes('data') || lowerInput.includes('analysis') || lowerInput.includes('analytics')) {
-      const config = {
-        name: 'Data Analysis Expert',
-        description: 'Specialized data analyst and visualization expert',
-        instruction: `You are a skilled data analyst and statistician. Help users with:
-- Data cleaning and preprocessing
-- Statistical analysis and hypothesis testing
-- Creating visualizations and insights
-- Pattern recognition and trend analysis
-- Business intelligence and reporting
-
-Always explain your methodology and provide actionable insights.`,
-        model: 'claude-3-sonnet',
-        provider: 'anthropic',
-        toolsets: ['file', 'database'],
-        workingDirectory: '/data',
-        environmentVariables: { 'PYTHONPATH': '/data/scripts', 'R_LIBS': '/data/r-packages' }
-      }
-
-      return {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: `Perfect! I've designed a data analysis specialist for you.
-
-**Agent Overview:**
-- **Name:** ${config.name}
-- **Purpose:** Advanced data analysis, statistics, and visualization
-- **Model:** ${config.model} (${config.provider})
-
-**Capabilities:**
-- File access for data processing
-- Database connectivity for data queries
-- Statistical analysis and modeling
-- Visualization and reporting
-
-**Working Environment:**
-- Directory: ${config.workingDirectory}
-- Python and R environment configured
-
-This agent excels at turning raw data into actionable insights. Ready to create it?`,
-        timestamp: new Date().toISOString(),
-        agentConfig: config
-      }
-    }
-
-    // Default helpful response
-    return {
-      id: `assistant-${Date.now()}`,
-      role: 'assistant',
-      content: `I'd be happy to help you create an agent! To design the best agent for your needs, could you tell me more about:
-
-1. **What specific tasks** should your agent handle?
-2. **What tools or systems** does it need to interact with?
-3. **What's your preferred AI model** (GPT-4, Claude, etc.)?
-4. **Any special requirements** like working directories or environment variables?
-
-The more details you provide, the better I can tailor the agent configuration for you.`,
-      timestamp: new Date().toISOString()
-    }
-  }
-
-  const handleCreateAgent = async (config: any) => {
     try {
-      // Generate the actual agent YAML configuration
+      // Call the backend API to create or update an agent based on the user's description
+      const apiPayload = editingAgent 
+        ? {
+            prompt: userMessage.content,
+            existing_agent: editingAgent.name,
+            mode: 'edit'
+          }
+        : {
+            prompt: userMessage.content
+          }
       
-      const yaml = generateYAMLConfig(config)
-      
-      // Auto-download the YAML file
-      const blob = new Blob([yaml], { type: 'text/yaml' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${config.name.toLowerCase().replace(/\s+/g, '-')}.yaml`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      const response = await apiClient.post<{path: string, out: string}>('/agents', apiPayload)
 
-      alert(`Agent "${config.name}" created successfully! The configuration file has been downloaded.`)
-      navigate('/agents')
+      const assistantResponse: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        content: editingAgent 
+          ? `🎉 **Agent Updated Successfully!**
+
+I've updated the **${editingAgent.name}** agent based on your requirements. Here are the details:
+
+**Agent File:** \`${response.path}\`
+
+**Update Output:**
+\`\`\`
+${response.out}
+\`\`\`
+
+Your agent has been successfully modified and is ready to use! You can now:
+
+1. **Start a new chat** with the updated agent
+2. **Make further modifications** if needed
+3. **Test the changes** to see how they work
+
+The agent list will be automatically refreshed when you open the new chat modal.
+
+Would you like to make more changes or start testing the updated agent?`
+          : `🎉 **Agent Created Successfully!**
+
+I've created a custom agent based on your description. Here are the details:
+
+**Agent File:** \`${response.path}\`
+
+**Creation Output:**
+\`\`\`
+${response.out}
+\`\`\`
+
+Your new agent has been saved to your custom agents directory and is ready to use! You can now:
+
+1. **Start a new chat** with this agent from the main interface
+2. **Edit the configuration** if you want to make adjustments  
+3. **Share or export** the agent for others to use
+
+The agent list will be automatically refreshed when you open the new chat modal.
+
+Would you like to create another agent or start chatting with this one?`,
+        timestamp: new Date().toISOString(),
+        agentConfig: {
+          path: response.path,
+          created: true,
+          agentName: response.path.split('/').pop()?.replace('.yaml', '') || 'unknown'
+        }
+      }
+
+      setMessages(prev => [...prev, assistantResponse])
     } catch (error) {
       console.error('Failed to create agent:', error)
+      
+      const errorResponse: ChatMessage = {
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        content: `❌ **Sorry, I couldn't create the agent.**
+
+There was an error processing your request. This might be due to:
+
+- Network connectivity issues
+- Server being temporarily unavailable
+- Invalid agent configuration
+
+Please try again with a more specific description of what you want your agent to do. For example:
+- "Create a coding assistant that helps with Python development"
+- "Make a data analysis agent that can work with CSV files"
+- "Build a writing assistant for technical documentation"
+
+The more specific you are, the better I can help you create the perfect agent!`,
+        timestamp: new Date().toISOString()
+      }
+
+      setMessages(prev => [...prev, errorResponse])
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleCopyConfig = (config: any) => {
-    const yamlConfig = generateYAMLConfig(config)
-    navigator.clipboard.writeText(yamlConfig)
-  }
 
-  const generateYAMLConfig = (config: any): string => {
-    return `version: "1.0"
-
-agents:
-  ${config.name.toLowerCase().replace(/\s+/g, '-')}:
-    model: ${config.model}
-    description: "${config.description}"
-    instruction: |
-      ${config.instruction.split('\n').map((line: string) => `      ${line}`).join('\n')}
-    toolsets:
-${config.toolsets.map((toolset: string) => `      - type: ${toolset}`).join('\n')}
-
-models:
-  ${config.model}:
-    provider: ${config.provider}
-    model: ${config.model}
-    temperature: 0.7
-    max_tokens: 4096`
-  }
 
   return (
     <div className="flex flex-col h-full">
@@ -250,43 +203,34 @@ models:
               }`}>
                 <div className="whitespace-pre-wrap text-sm">{message.content}</div>
                 
-                {/* Agent Configuration Preview */}
-                {message.agentConfig && (
-                  <div className="mt-4 p-4 bg-background rounded border space-y-3">
+                {/* Agent Creation Success Actions */}
+                {message.agentConfig && message.agentConfig.created && (
+                  <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-800 space-y-3">
                     <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-foreground">Generated Agent Configuration</h4>
+                      <h4 className="font-medium text-green-800 dark:text-green-200 flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        {editingAgent ? 'Agent Updated Successfully!' : 'Agent Created Successfully!'}
+                      </h4>
                       <div className="flex gap-2">
                         <Button 
-                          size="sm" 
+                          size="sm"
                           variant="outline"
-                          onClick={() => handleCopyConfig(message.agentConfig)}
+                          onClick={() => navigate('/')}
                         >
-                          <Copy className="h-3 w-3 mr-1" />
-                          Copy YAML
+                          Go to Home
                         </Button>
                         <Button 
                           size="sm"
-                          onClick={() => handleCreateAgent(message.agentConfig)}
+                          onClick={() => navigate(`/?newAgent=${message.agentConfig.agentName}`)}
+                          className="bg-green-600 hover:bg-green-700"
                         >
-                          <CheckCircle className="h-3 w-3 mr-1" />
-                          Create Agent
+                          Start Chat with Agent
                         </Button>
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-4 text-xs text-foreground">
-                      <div>
-                        <span className="font-medium">Model:</span> {message.agentConfig.model}
-                      </div>
-                      <div>
-                        <span className="font-medium">Provider:</span> {message.agentConfig.provider}
-                      </div>
-                      <div>
-                        <span className="font-medium">Working Dir:</span> {message.agentConfig.workingDirectory}
-                      </div>
-                      <div>
-                        <span className="font-medium">Toolsets:</span> {message.agentConfig.toolsets.join(', ')}
-                      </div>
+                    <div className="text-xs text-green-700 dark:text-green-300">
+                      <span className="font-medium">File Location:</span> {message.agentConfig.path}
                     </div>
                   </div>
                 )}
@@ -314,17 +258,25 @@ models:
 
       {/* Input Area */}
       <div className="border-t p-4">
-        <div className="flex gap-2">
-          <Input
+        <div className="flex gap-2 items-end">
+          <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Describe what you want your agent to do..."
-            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleSendMessage()
+              }
+            }}
             disabled={isLoading}
+            className="min-h-[40px] max-h-[120px] resize-none"
+            rows={1}
           />
           <Button 
             onClick={handleSendMessage}
             disabled={!input.trim() || isLoading}
+            className="flex-shrink-0"
           >
             <Send className="h-4 w-4" />
           </Button>
