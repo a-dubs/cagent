@@ -57,10 +57,87 @@ const processMessagesForSpecializedTools = (messages: Message[]): Message[] => {
     }
 
     // Check if this message has completed tools that are shell or think commands (old format)
-    if ((message.completedTools && message.completedTools.length > 0) || toolUseItems.length > 0) {
+    // OR if it has legacy toolCalls array
+    if ((message.completedTools && message.completedTools.length > 0) || 
+        toolUseItems.length > 0 ||
+        (message.toolCalls && message.toolCalls.length > 0)) {
       const shellTools: MergedShellToolCall[] = []
       const thinkTools: any[] = []
       const nonSpecializedTools: typeof message.completedTools = []
+
+      // Process legacy toolCalls format (convert to completed tools)
+      if (message.toolCalls && message.toolCalls.length > 0) {
+        message.toolCalls.forEach(toolCall => {
+          const isShellTool = toolCall.function.name === 'shell' || 
+                             toolCall.function.name === 'run_terminal_cmd' || 
+                             toolCall.function.name?.toLowerCase().includes('shell') ||
+                             toolCall.function.name?.toLowerCase().includes('terminal')
+          
+          const isThinkTool = toolCall.function.name?.toLowerCase().includes('think')
+
+          if (isShellTool) {
+            // Parse the command from arguments
+            let command = ''
+            try {
+              const parsedArgs = JSON.parse(toolCall.function.arguments || '{}')
+              command = parsedArgs.cmd || parsedArgs.command || toolCall.function.arguments || ''
+            } catch {
+              command = toolCall.function.arguments || ''
+            }
+
+            // Get output from the tool outputs map
+            const output = toolOutputs.get(toolCall.id) || ''
+
+            shellTools.push({
+              id: toolCall.id,
+              name: toolCall.function.name,
+              command: command,
+              output: output,
+              isError: false,
+              status: 'completed',
+              timestamp: message.timestamp || new Date().toISOString(),
+              duration: undefined
+            })
+          } else if (isThinkTool) {
+            // Parse the thought from arguments
+            let thought = ''
+            try {
+              const parsedArgs = JSON.parse(toolCall.function.arguments || '{}')
+              thought = parsedArgs.thought || parsedArgs.thinking || ''
+            } catch {
+              thought = toolCall.function.arguments || ''
+            }
+
+            const toolOutput = toolOutputs.get(toolCall.id) || ''
+            
+            // Create thinking structure
+            let thinking
+            if (toolOutput) {
+              // Remove "Thoughts:\n" prefix if present in output
+              const cleanOutput = toolOutput.replace(/^Thoughts?:\s*\n?/i, '')
+              thinking = {
+                summary: thought.length > 100 ? thought.substring(0, 100) + '...' : thought,
+                full: cleanOutput || thought
+              }
+            } else {
+              thinking = {
+                summary: thought.length > 100 ? thought.substring(0, 100) + '...' : thought,
+                full: thought
+              }
+            }
+
+            thinkTools.push({
+              id: toolCall.id,
+              name: toolCall.function.name,
+              thought: thought,
+              thinking: thinking,
+              status: 'completed',
+              timestamp: message.timestamp || new Date().toISOString(),
+              duration: undefined
+            })
+          }
+        })
+      }
 
       // Process completedTools (old format)
       if (message.completedTools) {
@@ -550,7 +627,7 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
     <div className="flex flex-col h-full bg-background">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0 max-h-full">
-        {processedMessages.length === 0 && (
+        {renderedMessages.length === 0 && (
           <div className="text-center text-muted-foreground py-8">
             <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p>Start a conversation with your agent</p>
@@ -577,7 +654,7 @@ export function ChatInterface({ messages, onSendMessage, isLoading, onConfirm, o
             )}
             
             <div
-              className={`max-w-[70%] rounded-lg px-3 py-2 ${
+              className={`max-w-[50%] rounded-lg px-3 py-2 ${
                 message.role === 'user'
                   ? 'bg-primary text-primary-foreground'
                   : message.isToolBubble

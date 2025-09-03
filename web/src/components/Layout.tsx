@@ -184,10 +184,14 @@ export function Layout({
       </div>
 
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
+        {/* Sidebar - prevent auto-hiding with minimum width and forced visibility */}
         <div 
           className="border-r bg-muted/10 flex flex-col relative"
-          style={{ width: sidebarWidth }}
+          style={{ 
+            width: Math.max(sidebarWidth, 250), 
+            minWidth: '250px',
+            flexShrink: 0
+          }}
         >
           {/* Navigation Section */}
           <div className="p-4 border-b">

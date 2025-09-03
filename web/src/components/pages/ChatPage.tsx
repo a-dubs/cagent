@@ -89,7 +89,7 @@ export function ChatPage() {
           onSendMessage={sendMessage}
           isLoading={isLoading}
           onConfirm={sendConfirmation}
-          onToolApprove={(toolCallId) => handleToolApproval(toolCallId, 'approve')}
+          onToolApprove={(toolCallId, approval) => handleToolApproval(toolCallId, approval)}
           showStartSession={!!(currentSession && !currentAgentSetup)}
           onStartSession={handleStartSession}
           agentFilename={currentSession?.most_recent_agent_filename}
