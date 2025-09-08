@@ -17,7 +17,6 @@ import (
 	"github.com/docker/cagent/internal/tui/core"
 	"github.com/docker/cagent/internal/tui/core/layout"
 	"github.com/docker/cagent/internal/tui/types"
-	"github.com/docker/cagent/pkg/runtime"
 	"github.com/docker/cagent/pkg/tools"
 )
 
@@ -33,8 +32,8 @@ type Model interface {
 	AddAssistantMessage() tea.Cmd
 	AddSeparatorMessage() tea.Cmd
 	AddOrUpdateToolCall(agentName string, toolCall tools.ToolCall, status types.ToolStatus) tea.Cmd
-	AddToolResult(msg *runtime.ToolCallResponseEvent, status types.ToolStatus) tea.Cmd
-	AppendToLastMessage(agentName string, messageType types.MessageType, content string) tea.Cmd
+	AddToolResult(toolCall tools.ToolCall, result string, status types.ToolStatus) tea.Cmd
+	AppendToLastMessage(agentName string, content string) tea.Cmd
 	ClearMessages()
 	ScrollToBottom() tea.Cmd
 	AddShellOutputMessage(content string) tea.Cmd
@@ -153,6 +152,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "end":
 			m.scrollToBottom()
 			return m, nil
+		case "tab":
+			// Move focus to next tool call
+			m.focusNextTool()
+			return m, nil
+		case "shift+tab":
+			// Move focus to previous tool call
+			m.focusPreviousTool()
+			return m, nil
+		case "escape":
+			// Clear tool focus
+			m.clearToolFocus()
+			return m, nil
 		}
 
 		if m.focused && m.toolFocused != nil {
@@ -268,16 +279,64 @@ func (m *model) IsFocused() bool {
 
 // Bindings returns key bindings for the component
 func (m *model) Bindings() []key.Binding {
-	return []key.Binding{
+	bindings := []key.Binding{
 		key.NewBinding(
-			key.WithKeys("up"),
-			key.WithHelp("↑", "up"),
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "scroll up"),
 		),
 		key.NewBinding(
-			key.WithKeys("down"),
-			key.WithHelp("↓", "down"),
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "scroll down"),
+		),
+		key.NewBinding(
+			key.WithKeys("pgup"),
+			key.WithHelp("pgup", "page up"),
+		),
+		key.NewBinding(
+			key.WithKeys("pgdown"),
+			key.WithHelp("pgdown", "page down"),
+		),
+		key.NewBinding(
+			key.WithKeys("home"),
+			key.WithHelp("home", "go to top"),
+		),
+		key.NewBinding(
+			key.WithKeys("end"),
+			key.WithHelp("end", "go to bottom"),
+		),
+		key.NewBinding(
+			key.WithKeys("tab"),
+			key.WithHelp("tab", "focus next tool"),
+		),
+		key.NewBinding(
+			key.WithKeys("shift+tab"),
+			key.WithHelp("shift+tab", "focus prev tool"),
+		),
+		key.NewBinding(
+			key.WithKeys("escape"),
+			key.WithHelp("esc", "clear tool focus"),
 		),
 	}
+	
+	// Add tool-specific bindings if a tool is focused
+	if m.toolFocused != nil {
+		bindings = append(bindings, []key.Binding{
+			key.NewBinding(
+				key.WithKeys("enter", " "),
+				key.WithHelp("enter/space", "toggle tool output"),
+			),
+			key.NewBinding(
+				key.WithKeys("e"),
+				key.WithHelp("e", "expand tool output"),
+			),
+			key.NewBinding(
+				key.WithKeys("c"),
+				key.WithHelp("c", "collapse tool output"),
+			),
+		}...)
+	}
+	
+	return bindings
 }
 
 // Help returns the help information
@@ -478,7 +537,7 @@ func (m *model) AddShellOutputMessage(content string) tea.Cmd {
 // AddAssistantMessage adds an assistant message to the chat
 func (m *model) AddAssistantMessage() tea.Cmd {
 	return m.addMessage(&types.Message{
-		Type: types.MessageTypeSpinner,
+		Type: types.MessageTypeAssistant,
 	})
 }
 
@@ -506,7 +565,7 @@ func (m *model) addMessage(msg *types.Message) tea.Cmd {
 
 // AddSeparatorMessage adds a separator message to the chat
 func (m *model) AddSeparatorMessage() tea.Cmd {
-	m.removeSpinner()
+	m.removeLastEmptyAssistantMessage()
 	msg := types.Message{
 		Type: types.MessageTypeSeparator,
 	}
@@ -536,7 +595,7 @@ func (m *model) AddOrUpdateToolCall(agentName string, toolCall tools.ToolCall, s
 	}
 
 	// If not found by ID, remove last empty assistant message
-	m.removeSpinner()
+	m.removeLastEmptyAssistantMessage()
 
 	// Create new tool call
 	msg := types.Message{
@@ -554,14 +613,14 @@ func (m *model) AddOrUpdateToolCall(agentName string, toolCall tools.ToolCall, s
 }
 
 // AddToolResult adds tool result to the most recent matching tool call
-func (m *model) AddToolResult(msg *runtime.ToolCallResponseEvent, status types.ToolStatus) tea.Cmd {
+func (m *model) AddToolResult(toolCall tools.ToolCall, result string, status types.ToolStatus) tea.Cmd {
 	for i := len(m.messages) - 1; i >= 0; i-- {
-		toolMessage := &m.messages[i]
-		if toolMessage.ToolCall.ID == msg.ToolCall.ID {
-			toolMessage.Content = msg.Response
-			toolMessage.ToolStatus = status
+		msg := &m.messages[i]
+		if msg.ToolCall.ID == toolCall.ID {
+			msg.Content = result
+			msg.ToolStatus = status
 			// Update the corresponding view
-			view := m.createToolCallView(toolMessage)
+			view := m.createToolCallView(msg)
 			m.views[i] = view
 			return view.Init()
 		}
@@ -570,16 +629,14 @@ func (m *model) AddToolResult(msg *runtime.ToolCallResponseEvent, status types.T
 }
 
 // AppendToLastMessage appends content to the last message (for streaming)
-func (m *model) AppendToLastMessage(agentName string, messageType types.MessageType, content string) tea.Cmd {
-	m.removeSpinner()
-
+func (m *model) AppendToLastMessage(agentName, content string) tea.Cmd {
 	if len(m.messages) == 0 {
 		return nil
 	}
 	lastIdx := len(m.messages) - 1
 	lastMsg := &m.messages[lastIdx]
 
-	if lastMsg.Type == messageType {
+	if lastMsg.Type == types.MessageTypeAssistant {
 		wasAtBottom := m.isAtBottom()
 		lastMsg.Content += content
 		lastMsg.Sender = agentName
@@ -602,7 +659,7 @@ func (m *model) AppendToLastMessage(agentName string, messageType types.MessageT
 	} else {
 		// Create new assistant message
 		msg := types.Message{
-			Type:    messageType,
+			Type:    types.MessageTypeAssistant,
 			Content: content,
 			Sender:  agentName,
 		}
@@ -656,13 +713,13 @@ func (m *model) createMessageView(msg *types.Message) layout.Model {
 	return view
 }
 
-// removeSpinner removes the last message if it's an assistant message with empty content
-func (m *model) removeSpinner() {
+// removeLastEmptyAssistantMessage removes the last message if it's an assistant message with empty content
+func (m *model) removeLastEmptyAssistantMessage() {
 	if len(m.messages) > 0 {
 		lastIdx := len(m.messages) - 1
 		lastMessage := m.messages[lastIdx]
 
-		if lastMessage.Type == types.MessageTypeSpinner {
+		if lastMessage.Type == types.MessageTypeAssistant && strings.Trim(lastMessage.Content, "\r\n\t ") == "" {
 			m.messages = m.messages[:lastIdx]
 			if len(m.views) > lastIdx {
 				m.views = m.views[:lastIdx]
@@ -673,3 +730,98 @@ func (m *model) removeSpinner() {
 }
 
 func uintPtr(u uint) *uint { return &u }
+
+// focusNextTool moves focus to the next available tool call
+func (m *model) focusNextTool() {
+	// Clear current tool focus first
+	m.clearToolFocus()
+	
+	// Find all tool call indices
+	var toolIndices []int
+	for i, msg := range m.messages {
+		if msg.Type == types.MessageTypeToolCall {
+			toolIndices = append(toolIndices, i)
+		}
+	}
+	
+	if len(toolIndices) == 0 {
+		return // No tools to focus
+	}
+	
+	// Find current focused tool index
+	currentIndex := -1
+	for i, idx := range toolIndices {
+		if toolView, ok := m.views[idx].(layout.ToolFocusable); ok && toolView.IsFocused() {
+			currentIndex = i
+			break
+		}
+	}
+	
+	// Move to next tool (or first if none focused)
+	nextIndex := (currentIndex + 1) % len(toolIndices)
+	targetViewIndex := toolIndices[nextIndex]
+	
+	if toolView, ok := m.views[targetViewIndex].(layout.ToolFocusable); ok {
+		toolView.SetFocused(true)
+		m.toolFocused = m.views[targetViewIndex]
+	}
+}
+
+// focusPreviousTool moves focus to the previous available tool call
+func (m *model) focusPreviousTool() {
+	// Clear current tool focus first
+	m.clearToolFocus()
+	
+	// Find all tool call indices
+	var toolIndices []int
+	for i, msg := range m.messages {
+		if msg.Type == types.MessageTypeToolCall {
+			toolIndices = append(toolIndices, i)
+		}
+	}
+	
+	if len(toolIndices) == 0 {
+		return // No tools to focus
+	}
+	
+	// Find current focused tool index
+	currentIndex := -1
+	for i, idx := range toolIndices {
+		if toolView, ok := m.views[idx].(layout.ToolFocusable); ok && toolView.IsFocused() {
+			currentIndex = i
+			break
+		}
+	}
+	
+	// Move to previous tool (or last if none focused)
+	var prevIndex int
+	if currentIndex <= 0 {
+		prevIndex = len(toolIndices) - 1
+	} else {
+		prevIndex = currentIndex - 1
+	}
+	
+	targetViewIndex := toolIndices[prevIndex]
+	if toolView, ok := m.views[targetViewIndex].(layout.ToolFocusable); ok {
+		toolView.SetFocused(true)
+		m.toolFocused = m.views[targetViewIndex]
+	}
+}
+
+// clearToolFocus removes focus from all tools
+func (m *model) clearToolFocus() {
+	// Clear focus from currently focused tool
+	if m.toolFocused != nil {
+		if toolView, ok := m.toolFocused.(layout.ToolFocusable); ok {
+			toolView.SetFocused(false)
+		}
+		m.toolFocused = nil
+	}
+	
+	// Also clear focus from all tool views as a safety measure
+	for _, view := range m.views {
+		if toolView, ok := view.(layout.ToolFocusable); ok {
+			toolView.SetFocused(false)
+		}
+	}
+}

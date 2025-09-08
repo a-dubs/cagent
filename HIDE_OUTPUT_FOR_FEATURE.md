@@ -175,3 +175,28 @@ This feature is fully backward compatible:
 5. **Debugging**: Focus on agent logic rather than tool details
 
 This implementation provides a clean, intuitive way to control output verbosity while maintaining full functionality and backward compatibility.
+
+## Bonus Feature: Token Usage Display
+
+As an additional enhancement, non-TUI runs now automatically display a token usage summary at the end:
+
+```
+--- Token Usage Summary ---
+Input tokens: 29
+Output tokens: 23
+Total tokens: 52
+Total cost: $0.000018
+Context usage: 52 / 128000 (0.0%)
+```
+
+**Benefits:**
+- **Cost monitoring**: See exactly how much each run costs
+- **Token awareness**: Track input/output token consumption
+- **Context monitoring**: See how much of the model's context window is used
+- **No debug mode needed**: Available in normal non-TUI runs
+
+**Implementation:**
+- Tracks `TokenUsageEvent` from the runtime
+- Displays summary after agent completion
+- Works with both `run --tui=false` and `exec` commands
+- Integrates seamlessly with hide-output-for feature

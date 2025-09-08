@@ -9,7 +9,8 @@ import (
 )
 
 type transferTaskModel struct {
-	msg *types.Message
+	msg     *types.Message
+	focused bool
 }
 
 func (m *transferTaskModel) Init() tea.Cmd {
@@ -34,5 +35,23 @@ func (m *transferTaskModel) View() string {
 		return "" // TODO: Partial tool call
 	}
 
-	return m.msg.Sender + " -> " + params.Agent + " task : " + styles.MutedStyle.Render(params.Task)
+	// Add focus indicator
+	var focusIndicator string
+	if m.focused {
+		focusIndicator = styles.HighlightStyle.Render("► ")
+	} else {
+		focusIndicator = "  "
+	}
+
+	return focusIndicator + m.msg.Sender + " -> " + params.Agent + " task : " + styles.MutedStyle.Render(params.Task)
+}
+
+// SetFocused sets the focus state
+func (m *transferTaskModel) SetFocused(focused bool) {
+	m.focused = focused
+}
+
+// IsFocused returns whether the model is focused
+func (m *transferTaskModel) IsFocused() bool {
+	return m.focused
 }

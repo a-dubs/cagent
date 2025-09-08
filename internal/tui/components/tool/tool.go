@@ -23,6 +23,7 @@ type toolModel struct {
 	width    int
 	height   int
 	focused  bool
+	expanded bool // Whether the tool output is expanded to show full content
 	spinner  spinner.Model
 	app      *app.App
 }
@@ -47,6 +48,7 @@ func New(msg *types.Message, a *app.App, renderer *glamour.TermRenderer) layout.
 		width:    80, // Default width
 		height:   1,  // Will be calculated
 		focused:  false,
+		expanded: false, // Start collapsed
 		spinner:  spinner.New(spinner.WithSpinner(spinner.Points)),
 		app:      a,
 		renderer: renderer,
@@ -68,6 +70,24 @@ func (mv *toolModel) Init() tea.Cmd {
 
 // Update handles messages and updates the message view state
 func (mv *toolModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		// Only handle keys when focused and the tool has completed content
+		if mv.focused && (mv.message.ToolStatus == types.ToolStatusCompleted || mv.message.ToolStatus == types.ToolStatusError) && mv.message.Content != "" {
+			switch msg.String() {
+			case "enter", " ": // Space or Enter to toggle expansion
+				mv.expanded = !mv.expanded
+				return mv, nil
+			case "e": // 'e' for expand
+				mv.expanded = true
+				return mv, nil
+			case "c": // 'c' for collapse
+				mv.expanded = false
+				return mv, nil
+			}
+		}
+	}
+
 	// Handle spinner updates for empty assistant messages or pending/running tools
 	if (mv.message.Type == types.MessageTypeAssistant && mv.message.Content == "") ||
 		(mv.message.Type == types.MessageTypeToolCall &&
@@ -85,6 +105,16 @@ func (mv *toolModel) View() string {
 	return mv.Render(mv.width)
 }
 
+// SetFocused sets the focus state
+func (mv *toolModel) SetFocused(focused bool) {
+	mv.focused = focused
+}
+
+// IsFocused returns whether the model is focused
+func (mv *toolModel) IsFocused() bool {
+	return mv.focused
+}
+
 // Render renders the message view content
 func (mv *toolModel) Render(width int) string {
 	msg := mv.message
@@ -93,7 +123,16 @@ func (mv *toolModel) Render(width int) string {
 	team := mv.app.Team()
 	agent := team.Agent(msg.Sender)
 	displayName := agent.ToolDisplayName(context.TODO(), msg.ToolCall.Function.Name)
-	content := fmt.Sprintf("%s %s", icon(msg.ToolStatus), styles.HighlightStyle.Render(displayName))
+	
+	// Add focus indicator
+	var focusIndicator string
+	if mv.focused {
+		focusIndicator = styles.HighlightStyle.Render("► ")
+	} else {
+		focusIndicator = "  "
+	}
+	
+	content := fmt.Sprintf("%s%s %s", focusIndicator, icon(msg.ToolStatus), styles.HighlightStyle.Render(displayName))
 
 	if msg.ToolCall.Function.Arguments != "" {
 		if msg.ToolCall.Function.Name == "search_files" {
@@ -124,17 +163,36 @@ func (mv *toolModel) Render(width int) string {
 		// Wrap long lines to fit the component width
 		lines := wrapLines(msg.Content, availableWidth)
 
-		// Take only first 10 lines after wrapping
-		if len(lines) > 10 {
-			lines = lines[:10]
-			// Add indicator that content was truncated
-			lines = append(lines, wrapLines("... (output truncated)", availableWidth)...)
+		var trimmedContent string
+		var expandHint string
+
+		if mv.expanded {
+			// Show all content when expanded
+			trimmedContent = strings.Join(lines, "\n")
+			if mv.focused {
+				expandHint = styles.MutedStyle.Render("\n[Press Enter/Space to collapse, 'c' to collapse]")
+			}
+		} else {
+			// Show limited content when collapsed
+			maxLines := 10
+			if len(lines) > maxLines {
+				displayLines := lines[:maxLines]
+				trimmedContent = strings.Join(displayLines, "\n")
+				remainingLines := len(lines) - maxLines
+				
+				if mv.focused {
+					expandHint = styles.HighlightStyle.Render(fmt.Sprintf("\n[Press Enter/Space to expand, 'e' to expand - %d more lines hidden]", remainingLines))
+				} else {
+					expandHint = styles.MutedStyle.Render(fmt.Sprintf("\n... (%d more lines - select to expand)", remainingLines))
+				}
+			} else {
+				// Content fits, no need for expansion
+				trimmedContent = strings.Join(lines, "\n")
+			}
 		}
 
-		// Join the lines back and apply muted style
-		trimmedContent := strings.Join(lines, "\n")
 		if trimmedContent != "" {
-			resultContent = "\n" + style.Render(trimmedContent)
+			resultContent = "\n" + style.Render(trimmedContent) + expandHint
 		}
 	}
 

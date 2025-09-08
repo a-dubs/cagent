@@ -18,6 +18,12 @@ type Focusable interface {
 	IsFocused() bool
 }
 
+// ToolFocusable represents tool components that can be focused for expansion
+type ToolFocusable interface {
+	SetFocused(bool)
+	IsFocused() bool
+}
+
 // Help represents components that provide help information
 type Help interface {
 	Bindings() []key.Binding
