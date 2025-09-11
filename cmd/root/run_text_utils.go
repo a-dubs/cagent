@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/docker/cagent/pkg/runtime"
 	"github.com/docker/cagent/pkg/tools"
 	"github.com/fatih/color"
 	"golang.org/x/term"
@@ -229,17 +231,66 @@ func printAgentName(agentName string) {
 	fmt.Printf("\n%s\n", blue("--- Agent: %s ---", bold(agentName)))
 }
 
-func printToolCall(toolCall tools.ToolCall, colorFunc ...func(format string, a ...any) string) {
+func printTokenUsageSummary(usage *runtime.Usage) {
+	totalTokens := usage.InputTokens + usage.OutputTokens
+
+	fmt.Printf("\n%s\n", gray("--- Token Usage Summary ---"))
+	fmt.Printf("%s %s\n", gray("Input tokens:"), bold(fmt.Sprintf("%d", usage.InputTokens)))
+	fmt.Printf("%s %s\n", gray("Output tokens:"), bold(fmt.Sprintf("%d", usage.OutputTokens)))
+	fmt.Printf("%s %s\n", gray("Total tokens:"), bold(fmt.Sprintf("%d", totalTokens)))
+
+	if usage.Cost > 0 {
+		fmt.Printf("%s %s\n", gray("Total cost:"), bold(fmt.Sprintf("$%.6f", usage.Cost)))
+	}
+
+	if usage.ContextLength > 0 && usage.ContextLimit > 0 {
+		contextPercent := float64(usage.ContextLength) / float64(usage.ContextLimit) * 100
+		fmt.Printf("%s %d / %d (%.1f%%)\n",
+			gray("Context usage:"),
+			usage.ContextLength,
+			usage.ContextLimit,
+			contextPercent)
+	}
+}
+
+func printTokenUsageStep(usage *runtime.Usage) {
+	totalTokens := usage.InputTokens + usage.OutputTokens
+
+	fmt.Printf("\n%s", gray("🔢 Tokens: "))
+	fmt.Printf("%s in + %s out = %s total",
+		bold(fmt.Sprintf("%d", usage.InputTokens)),
+		bold(fmt.Sprintf("%d", usage.OutputTokens)),
+		bold(fmt.Sprintf("%d", totalTokens)))
+
+	if usage.Cost > 0 {
+		fmt.Printf(" | Cost: %s", bold(fmt.Sprintf("$%.6f", usage.Cost)))
+	}
+
+	if usage.ContextLength > 0 && usage.ContextLimit > 0 {
+		contextPercent := float64(usage.ContextLength) / float64(usage.ContextLimit) * 100
+		fmt.Printf(" | Context: %.1f%%", contextPercent)
+	}
+
+	fmt.Println()
+}
+
+func printToolCall(toolCall tools.ToolCall, showTimestamp bool, colorFunc ...func(format string, a ...any) string) {
 	c := gray
 	if len(colorFunc) > 0 && colorFunc[0] != nil {
 		c = colorFunc[0]
 	}
-	fmt.Printf("\n%s\n", c("%s%s", bold(toolCall.Function.Name), formatToolCallArguments(toolCall.Function.Arguments)))
+
+	timestampPrefix := ""
+	if showTimestamp {
+		timestampPrefix = fmt.Sprintf("[%s] ", time.Now().Format("2006-01-02 15:04:05"))
+	}
+
+	fmt.Printf("\n%s\n", c("%s%s%s", timestampPrefix, bold(toolCall.Function.Name), formatToolCallArguments(toolCall.Function.Arguments)))
 }
 
-func printToolCallWithConfirmation(toolCall tools.ToolCall, scanner *bufio.Scanner) ConfirmationResult {
+func printToolCallWithConfirmation(toolCall tools.ToolCall, showTimestamp bool, scanner *bufio.Scanner) ConfirmationResult {
 	fmt.Printf("\n%s\n", bold(yellow("🛠️ Tool call requires confirmation 🛠️")))
-	printToolCall(toolCall, color.New(color.FgWhite).SprintfFunc())
+	printToolCall(toolCall, showTimestamp, color.New(color.FgWhite).SprintfFunc())
 	fmt.Printf("\n%s", bold(yellow("Can I run this tool? ([y]es/[a]ll/[n]o): ")))
 
 	// Try single-character input from stdin in raw mode (no Enter required)
