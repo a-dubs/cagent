@@ -41,8 +41,9 @@ $ cagent run config.yaml -a agent_name  # Run specific agent
 $ cagent run config.yaml --debug        # Enable debug logging
 $ cagent run config.yaml --hide-output-for=file-ops,shell  # Hide verbose tool output
 
-# Non-interactive execution
+# Non-interactive execution (shows token usage summary at end)
 $ cagent run config.yaml "message" --tui=false --yolo
+$ cagent run config.yaml --show-timestamps --show-tokens-every-step  # show token usage and timestamps after every API call
 $ cagent exec config.yaml --yolo        # Execute with default instructions
 
 # API Server (HTTP REST API)
@@ -101,6 +102,24 @@ $ cagent run config.yaml "message" --tui=false --yolo --hide-output-for=file-ops
 - ✅ Tool calls: `shell(cmd: "ls -la", cwd: ".")`
 - ✅ Agent responses and reasoning
 - ❌ Verbose tool output: Shows `shell response → (output hidden)` instead of full command output
+
+#### Token Usage Display
+
+Non-TUI runs automatically show a token usage summary at the end:
+
+```
+--- Token Usage Summary ---
+Input tokens: 29
+Output tokens: 23
+Total tokens: 52
+Total cost: $0.000018
+Context usage: 52 / 128000 (0.0%)
+```
+
+This provides visibility into:
+- **Input/Output tokens**: Breakdown of token consumption
+- **Total cost**: Calculated cost based on model pricing
+- **Context usage**: How much of the model's context window was used
 
 #### MCP Server Mode
 
@@ -622,11 +641,20 @@ cagent supports distributing via, and running agents from, Docker registries:
 
 ### Debug Mode
 
-Enable debug logging for detailed information:
+Enable debug logging and additional monitoring:
 
 ```bash
-# CLI mode
+# Basic debug logging
 ./bin/cagent run config.yaml --debug
+
+# Add timestamps to tool calls
+./bin/cagent run config.yaml --show-timestamps
+
+# Show token usage after each API call
+./bin/cagent run config.yaml --show-tokens-every-step
+
+# Combine for comprehensive monitoring
+./bin/cagent run config.yaml --debug --show-timestamps --show-tokens-every-step
 ```
 
 ### Log Analysis
