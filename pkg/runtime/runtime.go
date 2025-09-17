@@ -843,10 +843,16 @@ func (r *runtime) runTool(ctx context.Context, tool tools.Tool, toolCall tools.T
 		slog.Debug("Agent tool call completed", "tool", toolCall.Function.Name, "output_length", len(res.Output))
 	}
 
-	events <- ToolCallResponse(toolCall, res.Output, a.Name())
+	// Ensure tool output is not empty to avoid API errors
+	content := res.Output
+	if strings.TrimSpace(content) == "" {
+		content = "<no output returned>"
+	}
+
+	events <- ToolCallResponse(toolCall, content, a.Name())
 	toolResponseMsg := chat.Message{
 		Role:       chat.MessageRoleTool,
-		Content:    res.Output,
+		Content:    content,
 		ToolCallID: toolCall.ID,
 		CreatedAt:  time.Now().Format(time.RFC3339),
 	}
@@ -890,6 +896,11 @@ func (r *runtime) runAgentTool(ctx context.Context, handler ToolHandler, sess *s
 		output = res.Output
 		span.SetStatus(codes.Ok, "runtime tool handler completed")
 		slog.Debug("Tool executed successfully", "tool", toolCall.Function.Name)
+	}
+
+	// Ensure tool output is not empty to avoid API errors
+	if strings.TrimSpace(output) == "" {
+		output = "<no output returned>"
 	}
 
 	events <- ToolCallResponse(toolCall, output, a.Name())
