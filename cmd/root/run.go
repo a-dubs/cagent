@@ -43,6 +43,7 @@ type runExecFlags struct {
 	cpuProfile        string
 	memProfile        string
 	forceTUI          bool
+	showTokensEveryStep bool
 
 	// Exec only
 	hideToolCalls bool
@@ -101,6 +102,7 @@ func addRunOrExecFlags(cmd *cobra.Command, flags *runExecFlags) {
 	_ = cmd.PersistentFlags().MarkHidden("memprofile")
 	cmd.PersistentFlags().BoolVar(&flags.forceTUI, "force-tui", false, "Force TUI mode even when not in a terminal")
 	_ = cmd.PersistentFlags().MarkHidden("force-tui")
+	cmd.PersistentFlags().BoolVar(&flags.showTokensEveryStep, "show-tokens-every-step", false, "Show token usage after every AI API call")
 	cmd.MarkFlagsMutuallyExclusive("fake", "record")
 }
 
@@ -410,11 +412,12 @@ func (f *runExecFlags) handleExecMode(ctx context.Context, out *cli.Printer, rt 
 	}
 
 	err := cli.Run(ctx, out, cli.Config{
-		AppName:        AppName,
-		AttachmentPath: f.attachmentPath,
-		HideToolCalls:  f.hideToolCalls,
-		OutputJSON:     f.outputJSON,
-		AutoApprove:    f.autoApprove,
+		AppName:             AppName,
+		AttachmentPath:      f.attachmentPath,
+		HideToolCalls:       f.hideToolCalls,
+		OutputJSON:          f.outputJSON,
+		AutoApprove:         f.autoApprove,
+		ShowTokensEveryStep: f.showTokensEveryStep,
 	}, rt, sess, execArgs)
 	if cliErr, ok := err.(cli.RuntimeError); ok {
 		return RuntimeError{Err: cliErr.Err}

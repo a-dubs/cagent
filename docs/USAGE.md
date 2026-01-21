@@ -48,10 +48,11 @@ $ cagent run config.yaml --model anthropic/claude-sonnet-4-0    # Override all a
 $ cagent run config.yaml --model "agent1=openai/gpt-4o"         # Override specific agent
 $ cagent run config.yaml --model "agent1=openai/gpt-4o,agent2=anthropic/claude-sonnet-4-0"  # Multiple overrides
 
-# One off without TUI
+# Execute without TUI (shows token usage summary at end)
 $ cagent exec config.yaml                 # Run the agent once, with default instructions
 $ cagent exec config.yaml "First message" # Run the agent once with instructions
 $ cagent exec config.yaml --yolo          # Run the agent once and auto-accept all the tool calls
+$ cagent exec config.yaml --show-tokens-every-step  # Display token usage after each AI API call
 
 # API Server (HTTP REST API)
 $ cagent api config.yaml
@@ -134,6 +135,36 @@ Run an alias with: cagent run <alias>
 **Note:** Command-line flags override alias options. For example, `cagent run yolo-coder --yolo=false` will run the alias without yolo mode.
 
 ### Interface-Specific Features
+
+#### Token Usage Display
+
+The `exec` command automatically shows a token usage summary at the end:
+
+```
+--- Token Usage Summary ---
+Input tokens:  29
+Output tokens: 23
+Total tokens:  52
+Total cost:    $0.000018
+Context usage: 52 / 128000 (0.0%)
+```
+
+This provides visibility into:
+- **Input/Output tokens**: Breakdown of token consumption
+- **Total cost**: Calculated cost based on model pricing
+- **Context usage**: How much of the model's context window was used
+
+To see token usage after every AI API call (useful for debugging or monitoring), use the `--show-tokens-every-step` flag with `exec`:
+
+```bash
+$ cagent exec config.yaml --show-tokens-every-step
+```
+
+This will display token metrics inline during execution:
+
+```
+🔢 Tokens: 150 in + 75 out = 225 total | Cost: $0.000045 | Context: 2.1%
+```
 
 #### File Attachments
 

@@ -14,6 +14,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/docker/cagent/pkg/input"
+	"github.com/docker/cagent/pkg/runtime"
 	"github.com/docker/cagent/pkg/tools"
 )
 
@@ -158,6 +159,50 @@ func (p *Printer) PromptMaxIterationsContinue(ctx context.Context, maxIterations
 		p.Print("Exiting...\n\n")
 		return ConfirmationReject
 	}
+}
+
+// PrintTokenUsageSummary prints a summary of token usage at the end of execution
+func (p *Printer) PrintTokenUsageSummary(usage *runtime.Usage) {
+	totalTokens := usage.InputTokens + usage.OutputTokens
+
+	p.Printf("\n--- Token Usage Summary ---\n")
+	p.Printf("Input tokens:  %s\n", bold(fmt.Sprintf("%d", usage.InputTokens)))
+	p.Printf("Output tokens: %s\n", bold(fmt.Sprintf("%d", usage.OutputTokens)))
+	p.Printf("Total tokens:  %s\n", bold(fmt.Sprintf("%d", totalTokens)))
+
+	if usage.Cost > 0 {
+		p.Printf("Total cost:    %s\n", bold(fmt.Sprintf("$%.6f", usage.Cost)))
+	}
+
+	if usage.ContextLength > 0 && usage.ContextLimit > 0 {
+		contextPercent := float64(usage.ContextLength) / float64(usage.ContextLimit) * 100
+		p.Printf("Context usage: %d / %d (%.1f%%)\n",
+			usage.ContextLength,
+			usage.ContextLimit,
+			contextPercent)
+	}
+}
+
+// PrintTokenUsageStep prints token usage information after each AI API call
+func (p *Printer) PrintTokenUsageStep(usage *runtime.Usage) {
+	totalTokens := usage.InputTokens + usage.OutputTokens
+
+	p.Printf("\n🔢 Tokens: ")
+	p.Printf("%s in + %s out = %s total",
+		bold(fmt.Sprintf("%d", usage.InputTokens)),
+		bold(fmt.Sprintf("%d", usage.OutputTokens)),
+		bold(fmt.Sprintf("%d", totalTokens)))
+
+	if usage.Cost > 0 {
+		p.Printf(" | Cost: %s", bold(fmt.Sprintf("$%.6f", usage.Cost)))
+	}
+
+	if usage.ContextLength > 0 && usage.ContextLimit > 0 {
+		contextPercent := float64(usage.ContextLength) / float64(usage.ContextLimit) * 100
+		p.Printf(" | Context: %.1f%%", contextPercent)
+	}
+
+	p.Println()
 }
 
 // PromptOAuthAuthorization prompts the user for OAuth authorization

@@ -34,11 +34,12 @@ func (e RuntimeError) Unwrap() error {
 
 // Config holds configuration for running an agent in CLI mode
 type Config struct {
-	AppName        string
-	AttachmentPath string
-	AutoApprove    bool
-	HideToolCalls  bool
-	OutputJSON     bool
+	AppName             string
+	AttachmentPath      string
+	AutoApprove         bool
+	HideToolCalls       bool
+	OutputJSON          bool
+	ShowTokensEveryStep bool
 }
 
 // Run executes an agent in non-TUI mode, handling user input and runtime events
@@ -57,6 +58,7 @@ func Run(ctx context.Context, out *Printer, cfg Config, rt runtime.Runtime, sess
 	// If the last received event was an error, return it. That way the exit code
 	// will be non-zero if the agent failed.
 	var lastErr error
+	var lastTokenUsage *runtime.Usage
 
 	oneLoop := func(text string, rd io.Reader) error {
 		userInput := strings.TrimSpace(text)
@@ -90,6 +92,7 @@ func Run(ctx context.Context, out *Printer, cfg Config, rt runtime.Runtime, sess
 		firstLoop := true
 		lastAgent := rt.CurrentAgentName()
 		var lastConfirmedToolCallID string
+		llmIsTyping := false
 		for event := range rt.RunStream(ctx, sess) {
 			agentName := event.GetAgentName()
 			if agentName != "" && (firstLoop || lastAgent != agentName) {
@@ -103,6 +106,7 @@ func Run(ctx context.Context, out *Printer, cfg Config, rt runtime.Runtime, sess
 			switch e := event.(type) {
 			case *runtime.AgentChoiceEvent:
 				out.Print(e.Content)
+				llmIsTyping = len(e.Content) > 0
 			case *runtime.AgentChoiceReasoningEvent:
 				out.Print(e.Content)
 			case *runtime.ToolCallConfirmationEvent:
@@ -150,6 +154,18 @@ func Run(ctx context.Context, out *Printer, cfg Config, rt runtime.Runtime, sess
 				} else {
 					lastErr = fmt.Errorf("%s", e.Error)
 					out.PrintError(lastErr)
+				}
+			case *runtime.TokenUsageEvent:
+				// Track the latest token usage for display at the end
+				lastTokenUsage = e.Usage
+
+				// Show token usage after every step if flag is enabled
+				if cfg.ShowTokensEveryStep {
+					if llmIsTyping {
+						out.Println()
+						llmIsTyping = false
+					}
+					out.PrintTokenUsageStep(e.Usage)
 				}
 			case *runtime.MaxIterationsReachedEvent:
 				result := out.PromptMaxIterationsContinue(ctx, e.MaxIterations)
@@ -220,6 +236,11 @@ func Run(ctx context.Context, out *Printer, cfg Config, rt runtime.Runtime, sess
 				return err
 			}
 		}
+	}
+
+	// Display token usage and cost at the end of non-TUI runs
+	if lastTokenUsage != nil {
+		out.PrintTokenUsageSummary(lastTokenUsage)
 	}
 
 	// Wrap runtime errors to prevent duplicate error messages and usage display

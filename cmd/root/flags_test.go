@@ -232,3 +232,51 @@ func TestDefaultModelLogic(t *testing.T) {
 		})
 	}
 }
+
+func TestShowTokensEveryStepFlag(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		args     []string
+		expected bool
+	}{
+		{
+			name:     "flag_not_set",
+			args:     []string{},
+			expected: false,
+		},
+		{
+			name:     "flag_set",
+			args:     []string{"--show-tokens-every-step"},
+			expected: true,
+		},
+		{
+			name:     "flag_set_with_other_flags",
+			args:     []string{"--yolo", "--show-tokens-every-step", "-a", "root"},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var flags runExecFlags
+			cmd := &cobra.Command{
+				RunE: func(*cobra.Command, []string) error {
+					return nil
+				},
+			}
+
+			addRunOrExecFlags(cmd, &flags)
+			addRuntimeConfigFlags(cmd, &flags.runConfig)
+
+			cmd.SetArgs(append(tt.args, "agent.yaml"))
+			err := cmd.Execute()
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, flags.showTokensEveryStep)
+		})
+	}
+}
