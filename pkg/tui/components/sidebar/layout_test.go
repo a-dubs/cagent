@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/docker/cagent/pkg/chat"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -143,6 +144,64 @@ func TestScrollbarGapInOutput(t *testing.T) {
 	// Verify there's actually a space between content and scrollbar
 	assert.Contains(t, combined, " │",
 		"there should be a space (gap) before the scrollbar")
+}
+
+func TestSidebarTokenUsageShowsContextAndSessionTotals(t *testing.T) {
+	t.Parallel()
+
+	sessionState := &service.SessionState{}
+	m := New(sessionState).(*model)
+	m.SetSize(60, 40)
+	m.SetMode(ModeVertical)
+
+	// Seed "latest" usage + one per-message usage record.
+	m.SetTokenUsage(&runtime.TokenUsageEvent{
+		SessionID:    "session-1",
+		AgentContext: runtime.AgentContext{AgentName: "agent1"},
+		Usage: &runtime.Usage{
+			InputTokens:   1000,
+			OutputTokens:  500,
+			ContextLength: 1500,
+			ContextLimit:  8000,
+			Cost:          0.10,
+			LastMessage: &runtime.MessageUsage{
+				Usage: chat.Usage{
+					InputTokens:       1000,
+					OutputTokens:      500,
+					CachedInputTokens: 50,
+					CacheWriteTokens:  25,
+				},
+				Cost:  0.10,
+				Model: "test/model",
+			},
+		},
+	})
+
+	// Second event should keep updating totals.
+	m.SetTokenUsage(&runtime.TokenUsageEvent{
+		SessionID:    "session-1",
+		AgentContext: runtime.AgentContext{AgentName: "agent1"},
+		Usage: &runtime.Usage{
+			InputTokens:   200,
+			OutputTokens:  300,
+			ContextLength: 500,
+			ContextLimit:  8000,
+			Cost:          0.15,
+			LastMessage: &runtime.MessageUsage{
+				Usage: chat.Usage{
+					InputTokens:  200,
+					OutputTokens: 300,
+				},
+				Cost:  0.05,
+				Model: "test/model",
+			},
+		},
+	})
+
+	view := m.verticalView()
+	require.Contains(t, view, "Token Usage")
+	require.Contains(t, view, "Context (latest)")
+	require.Contains(t, view, "Total (session)")
 }
 
 // BenchmarkSidebarVerticalView_Scroll benchmarks the verticalView() method during scrolling.

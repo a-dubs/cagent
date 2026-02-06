@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/docker/cagent/pkg/chat"
 	"github.com/docker/cagent/pkg/modelsdev"
 	"github.com/docker/cagent/pkg/paths"
 	"github.com/docker/cagent/pkg/runtime"
@@ -107,6 +108,17 @@ type model struct {
 	layoutCfg          LayoutConfig              // layout configuration for spacing
 	sessionUsage       map[string]*runtime.Usage // sessionID -> latest usage snapshot
 	sessionAgent       map[string]string         // sessionID -> agent name
+	// sessionTotals tracks cumulative per-message usage for each session.
+	//
+	// We intentionally build this from per-message usage (TokenUsageEvent.Usage.LastMessage)
+	// when available so we can show "Total (session)" independently from "Context (latest)".
+	//
+	// Included token fields in totals:
+	// - Input: InputTokens + CachedInputTokens + CacheWriteTokens (when available)
+	// - Output: OutputTokens
+	//
+	// If a runtime doesn't provide per-message usage, totals may be partial (or 0).
+	sessionTotals map[string]*usageTotals
 	todoComp           *todotool.SidebarComponent
 	mcpInit            bool
 	ragIndexing        map[string]*ragIndexingState // strategy name -> indexing state
@@ -145,6 +157,12 @@ type model struct {
 	cacheDirty           bool     // True when cache needs rebuild
 }
 
+type usageTotals struct {
+	inputTokens  int64
+	outputTokens int64
+	cost         float64
+}
+
 // Option is a functional option for configuring the sidebar.
 type Option func(*model)
 
@@ -165,6 +183,7 @@ func New(sessionState *service.SessionState, opts ...Option) Model {
 		height:             24,
 		sessionUsage:       make(map[string]*runtime.Usage),
 		sessionAgent:       make(map[string]string),
+		sessionTotals:      make(map[string]*usageTotals),
 		todoComp:           todotool.NewSidebarComponent(),
 		spinner:            spinner.New(spinner.ModeSpinnerOnly, styles.SpinnerDotsHighlightStyle),
 		sessionTitle:       "New session",
@@ -229,6 +248,20 @@ func (m *model) SetTokenUsage(event *runtime.TokenUsageEvent) {
 	usage := *event.Usage
 	m.sessionUsage[event.SessionID] = &usage
 	m.sessionAgent[event.SessionID] = event.AgentName
+
+	// Accumulate session totals from per-message usage when provided.
+	// This keeps "Total (session)" updating as messages arrive without relying
+	// on session-level fields (which intentionally represent only the latest call).
+	if usage.LastMessage != nil {
+		totals := m.sessionTotals[event.SessionID]
+		if totals == nil {
+			totals = &usageTotals{}
+			m.sessionTotals[event.SessionID] = totals
+		}
+		totals.inputTokens += usage.LastMessage.InputTokens + usage.LastMessage.CachedInputTokens + usage.LastMessage.CacheWriteTokens
+		totals.outputTokens += usage.LastMessage.OutputTokens
+		totals.cost += usage.LastMessage.Cost
+	}
 
 	// Mark session as having content once we receive token usage
 	m.sessionHasContent = true
@@ -402,6 +435,36 @@ func (m *model) LoadFromSession(sess *session.Session) {
 			InputTokens:  sess.InputTokens,
 			OutputTokens: sess.OutputTokens,
 			Cost:         sess.Cost,
+		}
+	}
+
+	// Seed per-message totals for "Total (session)".
+	// Prefer message-embedded usage when messages exist (local runtime mode). Otherwise
+	// fall back to MessageUsageHistory (remote runtime mode).
+	{
+		var totals usageTotals
+		if len(sess.Messages) > 0 {
+			for _, item := range sess.Messages {
+				if item.Message == nil {
+					continue
+				}
+				msg := item.Message.Message
+				if msg.Role != chat.MessageRoleAssistant || msg.Usage == nil {
+					continue
+				}
+				totals.inputTokens += msg.Usage.InputTokens + msg.Usage.CachedInputTokens + msg.Usage.CacheWriteTokens
+				totals.outputTokens += msg.Usage.OutputTokens
+				totals.cost += item.Message.Message.Cost
+			}
+		} else {
+			for _, rec := range sess.MessageUsageHistory {
+				totals.inputTokens += rec.Usage.InputTokens + rec.Usage.CachedInputTokens + rec.Usage.CacheWriteTokens
+				totals.outputTokens += rec.Usage.OutputTokens
+				totals.cost += rec.Cost
+			}
+		}
+		if totals.inputTokens > 0 || totals.outputTokens > 0 || totals.cost > 0 {
+			m.sessionTotals[sess.ID] = &totals
 		}
 	}
 
@@ -950,41 +1013,70 @@ func (m *model) formatProgress(state *ragIndexingState) string {
 }
 
 func (m *model) tokenUsage(contentWidth int) string {
-	var totalTokens int64
+	// Latest usage snapshot (context/latest call)
+	var latest *runtime.Usage
+	if len(m.sessionUsage) == 1 {
+		for _, usage := range m.sessionUsage {
+			latest = usage
+			break
+		}
+	}
+
+	// Session totals from per-message usage (preferred).
+	var totalInput, totalOutput int64
 	var totalCost float64
-	for _, usage := range m.sessionUsage {
-		totalTokens += usage.InputTokens + usage.OutputTokens
-		totalCost += usage.Cost
+	for _, totals := range m.sessionTotals {
+		totalInput += totals.inputTokens
+		totalOutput += totals.outputTokens
+		totalCost += totals.cost
 	}
 
-	var tokenUsage strings.Builder
-	fmt.Fprintf(&tokenUsage, "%s", formatTokenCount(totalTokens))
-	if ctxText := m.contextPercent(); ctxText != "" {
-		fmt.Fprintf(&tokenUsage, " (%s)", ctxText)
+	lines := make([]string, 0, 2)
+	if latest != nil {
+		latestTotal := latest.InputTokens + latest.OutputTokens
+		var latestLine strings.Builder
+		fmt.Fprintf(&latestLine, "%s ", styles.MutedStyle.Render("Context (latest)"))
+		fmt.Fprintf(&latestLine, "In %s Out %s Tot %s", formatTokenCount(latest.InputTokens), formatTokenCount(latest.OutputTokens), formatTokenCount(latestTotal))
+		if ctxText := m.contextPercent(); ctxText != "" {
+			fmt.Fprintf(&latestLine, " (%s)", ctxText)
+		}
+		lines = append(lines, latestLine.String())
 	}
-	fmt.Fprintf(&tokenUsage, " %s", styles.TabAccentStyle.Render("$"+formatCost(totalCost)))
 
-	return m.renderTab("Token Usage", tokenUsage.String(), contentWidth)
+	{
+		totalTokens := totalInput + totalOutput
+		var totalLine strings.Builder
+		fmt.Fprintf(&totalLine, "%s ", styles.MutedStyle.Render("Total (session)"))
+		fmt.Fprintf(&totalLine, "In %s Out %s Tot %s", formatTokenCount(totalInput), formatTokenCount(totalOutput), formatTokenCount(totalTokens))
+		if totalCost > 0 {
+			fmt.Fprintf(&totalLine, " %s", styles.TabAccentStyle.Render("$"+formatCost(totalCost)))
+		}
+		lines = append(lines, totalLine.String())
+	}
+
+	return m.renderTab("Token Usage", strings.Join(lines, "\n"), contentWidth)
 }
 
 // tokenUsageSummary returns a single-line summary for horizontal layout.
 func (m *model) tokenUsageSummary() string {
-	if len(m.sessionUsage) == 0 {
+	// Collapsed view should be compact; show session totals (when available) and context percent.
+	var totalInput, totalOutput int64
+	var totalCost float64
+	for _, totals := range m.sessionTotals {
+		totalInput += totals.inputTokens
+		totalOutput += totals.outputTokens
+		totalCost += totals.cost
+	}
+	if totalInput == 0 && totalOutput == 0 && totalCost == 0 {
 		return ""
 	}
 
-	var totalTokens int64
-	var totalCost float64
-	for _, usage := range m.sessionUsage {
-		totalTokens += usage.InputTokens + usage.OutputTokens
-		totalCost += usage.Cost
-	}
-
+	totalTokens := totalInput + totalOutput
 	if ctxText := m.contextPercent(); ctxText != "" {
-		return fmt.Sprintf("Tokens: %s | Cost: $%s | Context: %s", formatTokenCount(totalTokens), formatCost(totalCost), ctxText)
+		return fmt.Sprintf("Tokens (session): %s | Cost: $%s | Context (latest): %s", formatTokenCount(totalTokens), formatCost(totalCost), ctxText)
 	}
 
-	return fmt.Sprintf("Tokens: %s | Cost: $%s", formatTokenCount(totalTokens), formatCost(totalCost))
+	return fmt.Sprintf("Tokens (session): %s | Cost: $%s", formatTokenCount(totalTokens), formatCost(totalCost))
 }
 
 func (m *model) sessionInfo(contentWidth int) string {
