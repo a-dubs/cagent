@@ -14,6 +14,7 @@ import (
 
 	"github.com/docker/cagent/pkg/tools"
 	"github.com/docker/cagent/pkg/tui/animation"
+	"github.com/docker/cagent/pkg/tui/components/autotail"
 	"github.com/docker/cagent/pkg/tui/components/markdown"
 	"github.com/docker/cagent/pkg/tui/components/tool"
 	"github.com/docker/cagent/pkg/tui/core/layout"
@@ -24,8 +25,12 @@ import (
 )
 
 const (
-	// previewLines is the number of reasoning lines to show when collapsed.
+	// previewLines is the number of reasoning lines to show when collapsed (legacy).
+	// This has been superseded by the auto-tail window, but we keep it for tests
+	// and as a fallback when the viewport height is constrained.
 	previewLines = 3
+	// collapsedTailLines is the default window size for collapsed reasoning auto-tail.
+	collapsedTailLines = autotail.DefaultWindowLines
 	// completedToolVisibleDuration is how long a completed tool remains fully visible before fading.
 	completedToolVisibleDuration = 1500 * time.Millisecond
 	// completedToolFadeDuration is how long the fade-out effect lasts before hiding.
@@ -110,6 +115,9 @@ type Model struct {
 	reasoningVersion    int          // increments when reasoning content changes
 	cache               *renderCache // cached rendering results
 	animationRegistered bool         // whether we're registered with animation coordinator
+
+	// Collapsed reasoning auto-tail state (non-persistent).
+	reasoningTail autotail.Model
 }
 
 // New creates a new reasoning block.
@@ -120,6 +128,11 @@ func New(id, agentName string, sessionState *service.SessionState) *Model {
 		expanded:     false,
 		width:        80,
 		sessionState: sessionState,
+		reasoningTail: func() autotail.Model {
+			m := autotail.New()
+			m.SetWindowLines(collapsedTailLines)
+			return m
+		}(),
 	}
 }
 
@@ -174,6 +187,45 @@ func (m *Model) AppendReasoning(content string) {
 		// Last item was a tool, start new reasoning block
 		m.contentItems = append(m.contentItems, contentItem{kind: contentItemReasoning, reasoning: content})
 	}
+}
+
+// TailOffset returns the current top-line offset of the collapsed reasoning viewport.
+// Exposed for hit-testing / integration tests; does not persist to session logs.
+func (m *Model) TailOffset() int { return m.reasoningTail.Offset }
+
+// TailFollow returns whether the collapsed reasoning viewport is following the bottom.
+func (m *Model) TailFollow() bool { return m.reasoningTail.Follow }
+
+// HandleWheel routes a wheel delta to the collapsed reasoning tail viewport.
+// Returns true if the wheel was consumed (i.e., the cursor is over the tail region).
+func (m *Model) HandleWheel(localLine int, delta int) bool {
+	if delta == 0 {
+		return false
+	}
+	if m.expanded {
+		return false
+	}
+
+	// Collapsed layout:
+	// - line 0: header
+	// - line 1..: reasoning tail preview (if any)
+	cache := m.ensureCache()
+	if len(cache.lines) == 0 {
+		return false
+	}
+
+	// Tail starts at line 1.
+	if localLine < 1 {
+		return false
+	}
+	// Only consume within the tail window region (or less if content is short).
+	tailHeight := min(m.reasoningTail.WindowLines, len(cache.lines))
+	if localLine >= 1+tailHeight {
+		return false
+	}
+
+	m.reasoningTail.Scroll(delta, cache.lines)
+	return true
 }
 
 // Reasoning returns the full reasoning content (concatenated from all reasoning items).
@@ -549,11 +601,19 @@ func (m *Model) renderCollapsed() string {
 	header := m.renderHeader(false)
 	parts = append(parts, header)
 
-	// Last N lines of reasoning
-	if m.Reasoning() != "" {
-		preview, _ := m.renderReasoningPreviewWithTruncationInfo()
-		if preview != "" {
-			parts = append(parts, preview)
+	// Cursor-like auto-tail preview for reasoning: show last ~10 lines and follow while streaming,
+	// but allow mouse-wheel scrolling inside (paused follow).
+	cache := m.ensureCache()
+	if len(cache.lines) > 0 {
+		m.reasoningTail.Sync(cache.lines)
+		win := m.reasoningTail.Window(cache.lines)
+		if len(win) > 0 {
+			// Style each line like existing muted/italic reasoning, but keep the viewport windowed.
+			styled := make([]string, 0, len(win))
+			for _, line := range win {
+				styled = append(styled, styles.MutedStyle.Italic(true).Render(line))
+			}
+			parts = append(parts, styles.AssistantMessageStyle.Render(strings.Join(styled, "\n")))
 		}
 	}
 

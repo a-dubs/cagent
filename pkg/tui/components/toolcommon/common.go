@@ -11,6 +11,7 @@ import (
 	"github.com/docker/cagent/pkg/paths"
 	"github.com/docker/cagent/pkg/tools"
 	"github.com/docker/cagent/pkg/tools/builtin"
+	"github.com/docker/cagent/pkg/tui/components/autotail"
 	"github.com/docker/cagent/pkg/tui/components/spinner"
 	"github.com/docker/cagent/pkg/tui/styles"
 	"github.com/docker/cagent/pkg/tui/types"
@@ -156,6 +157,69 @@ func FormatToolResult(content string, width int) string {
 	return out
 }
 
+// FormatToolResultExpandableWithAutoTail is like FormatToolResultExpandable, but when expanded output
+// overflows the default window, it renders an auto-tail window and uses msg-scoped follow/offset state.
+//
+// This state is display-only and does not persist to the session log.
+func FormatToolResultExpandableWithAutoTail(msg *types.Message, width int, expanded bool) (formatted string, hasOverflow bool) {
+	if msg == nil {
+		return "", false
+	}
+
+	// Display-only cleanup: tool outputs (especially shell) can contain ANSI escape
+	// sequences that pollute the transcript. Strip them here in the shared
+	// formatting layer so all tool renderers benefit.
+	content := ansi.Strip(msg.Content)
+
+	var formattedContent string
+	var m map[string]any
+	if err := json.Unmarshal([]byte(content), &m); err != nil {
+		formattedContent = content
+	} else if buf, err := json.MarshalIndent(m, "", "  "); err != nil {
+		formattedContent = content
+	} else {
+		formattedContent = string(buf)
+	}
+
+	availableWidth := max(width-styles.ToolCallResult.GetHorizontalFrameSize(), 10) // Minimum readable width
+
+	lines := WrapLines(formattedContent, availableWidth)
+
+	if len(lines) <= autotail.DefaultWindowLines {
+		return strings.Join(lines, "\n"), false
+	}
+
+	if !expanded {
+		// Collapsed.
+		hint := styles.MutedStyle.Italic(true).Render("… click to expand …")
+		lines = append(lines[:autotail.DefaultWindowLines], WrapLines(hint, availableWidth)...)
+		return strings.Join(lines, "\n"), true
+	}
+
+	// Expanded: render an auto-tail window.
+	maxOffset := max(0, len(lines)-autotail.DefaultWindowLines)
+	if !msg.ToolResultScrollInitialized {
+		msg.ToolResultFollow = true
+		msg.ToolResultScrollOffset = maxOffset
+		msg.ToolResultScrollInitialized = true
+	}
+
+	offset := msg.ToolResultScrollOffset
+	if msg.ToolResultFollow {
+		offset = maxOffset
+	}
+	offset = clamp(offset, 0, maxOffset)
+	msg.ToolResultScrollOffset = offset
+
+	end := min(offset+autotail.DefaultWindowLines, len(lines))
+	window := lines[offset:end]
+
+	hint := styles.MutedStyle.Italic(true).Render("scroll to view • click to collapse")
+	window = append(window, WrapLines(hint, availableWidth)...)
+
+	return strings.Join(window, "\n"), true
+}
+
 // FormatToolResultExpandable formats a tool result for display and optionally expands it.
 //
 // - If the wrapped output is <= 10 lines, it returns the full output and hasOverflow=false.
@@ -226,7 +290,7 @@ func RenderTool(msg *types.Message, inProgress spinner.Spinner, args, result str
 		if args != "" {
 			content += " " + args
 		}
-		formattedResult := FormatToolResult(msg.Content, width)
+		formattedResult, _ := FormatToolResultExpandableWithAutoTail(msg, width, true)
 		content += "\n" + resultStyle.MarginLeft(styles.ToolCompletedIcon.GetMarginLeft()).Render(formattedResult)
 		return styles.RenderComposite(styles.ToolMessageStyle.Width(width), content)
 	}
@@ -373,6 +437,92 @@ func RenderFriendlyHeader(msg *types.Message, s spinner.Spinner, toolNameStyle l
 	content := fmt.Sprintf("%s %s", icon, styles.ToolDescription.Render(friendlyDesc))
 	content += " " + toolNameStyle.UnsetPadding().Render("("+msg.ToolDefinition.DisplayName()+")")
 	return content, true
+}
+
+func clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
+// ResultBlockRange attempts to locate the indented tool result block within a rendered tool view.
+// It returns a [start, end) line range (local to the tool view) that should be treated as an
+// inner scrollable viewport when using auto-tail formatting.
+//
+// This is best-effort hit-testing: it looks for contiguous lines that have at least the standard
+// result indent used by RenderTool.
+func ResultBlockRange(rendered string) (start, end int, ok bool) {
+	if rendered == "" {
+		return 0, 0, false
+	}
+
+	indent := styles.ToolCompletedIcon.GetMarginLeft()
+	if indent <= 0 {
+		return 0, 0, false
+	}
+
+	lines := strings.Split(strings.TrimSuffix(rendered, "\n"), "\n")
+	first := -1
+	last := -1
+	for i, line := range lines {
+		plain := ansi.Strip(line)
+		leading := countLeadingSpaces(plain)
+		if leading >= indent && strings.TrimSpace(plain) != "" {
+			if first == -1 {
+				first = i
+			}
+			last = i
+			continue
+		}
+
+		// If we've started the block and hit a non-indented line, stop.
+		if first != -1 {
+			break
+		}
+	}
+	if first == -1 || last == -1 {
+		return 0, 0, false
+	}
+	return first, last + 1, true
+}
+
+func countLeadingSpaces(s string) int {
+	n := 0
+	for _, r := range s {
+		if r != ' ' {
+			break
+		}
+		n++
+	}
+	return n
+}
+
+// ToolResultMaxOffset returns the maximum top-line offset for the auto-tail result window at this width.
+// This mirrors the wrapping/pretty-printing behavior in FormatToolResult* so wheel routing can clamp offsets.
+func ToolResultMaxOffset(msg *types.Message, width int) int {
+	if msg == nil {
+		return 0
+	}
+
+	content := ansi.Strip(msg.Content)
+
+	var formattedContent string
+	var m map[string]any
+	if err := json.Unmarshal([]byte(content), &m); err != nil {
+		formattedContent = content
+	} else if buf, err := json.MarshalIndent(m, "", "  "); err != nil {
+		formattedContent = content
+	} else {
+		formattedContent = string(buf)
+	}
+
+	availableWidth := max(width-styles.ToolCallResult.GetHorizontalFrameSize(), 10)
+	lines := WrapLines(formattedContent, availableWidth)
+	return max(0, len(lines)-autotail.DefaultWindowLines)
 }
 
 func isDeniedOrRejectedToolCall(msg *types.Message) bool {

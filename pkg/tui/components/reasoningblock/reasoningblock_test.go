@@ -75,15 +75,19 @@ func TestReasoningBlockCollapsedPreviewShowsNewestLines(t *testing.T) {
 	block := New("test-1", "root", sessionState)
 	block.SetSize(80, 24)
 
-	// Ensure we have enough lines to exceed previewLines.
+	// Ensure we have enough lines to exceed the auto-tail window (~10 lines).
 	// Use markdown list to ensure the renderer preserves line breaks.
-	block.SetReasoning("1. oldest-1\n2. oldest-2\n3. oldest-3\n4. newest-1\n5. newest-2\n6. newest-3")
+	block.SetReasoning(
+		"1. oldest-1\n2. oldest-2\n3. oldest-3\n4. oldest-4\n5. oldest-5\n" +
+			"6. mid-1\n7. mid-2\n8. mid-3\n9. mid-4\n10. mid-5\n" +
+			"11. newest-1\n12. newest-2\n13. newest-3\n14. newest-4\n15. newest-5",
+	)
 
 	view := ansi.Strip(block.View())
 
 	// Collapsed preview should show the newest lines, not the oldest.
 	assert.Contains(t, view, "newest-1")
-	assert.Contains(t, view, "newest-3")
+	assert.Contains(t, view, "newest-5")
 	assert.NotContains(t, view, "oldest-1")
 }
 

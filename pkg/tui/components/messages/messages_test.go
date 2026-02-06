@@ -847,6 +847,43 @@ func TestHasAnimatedContent(t *testing.T) {
 	}
 }
 
+func TestMouseWheelRoutesIntoReasoningTailViewport(t *testing.T) {
+	t.Parallel()
+
+	sessionState := &service.SessionState{}
+	m := NewScrollableView(80, 24, sessionState).(*model)
+	m.SetSize(80, 24)
+
+	// Create a reasoning block with enough lines to overflow the tail window.
+	var b strings.Builder
+	b.WriteString("```\n")
+	for i := range 30 {
+		b.WriteString("line")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteString("\n")
+	}
+	b.WriteString("```\n")
+	m.AppendReasoning("root", b.String())
+
+	require.Len(t, m.views, 1)
+	block, ok := m.views[0].(*reasoningblock.Model)
+	require.True(t, ok)
+
+	// Ensure initial state is following bottom (offset at max).
+	_ = m.View()
+	initialOffset := block.TailOffset()
+	require.True(t, block.TailFollow())
+	require.Greater(t, initialOffset, 0)
+
+	// Wheel up over the tail region (y=1 is the first tail line; y=0 is header).
+	wheelUp := tea.MouseWheelMsg{X: 2, Y: 1, Button: tea.MouseWheelUp}
+	m.Update(wheelUp)
+
+	_ = m.View()
+	assert.False(t, block.TailFollow(), "wheel up inside tail should pause follow")
+	assert.Less(t, block.TailOffset(), initialOffset, "wheel up should move the window up")
+}
+
 // BenchmarkMessagesView_RenderWhileScrolling benchmarks View() with scroll offset changes.
 // This measures render cost only (no input handling or coalescing).
 func BenchmarkMessagesView_RenderWhileScrolling(b *testing.B) {

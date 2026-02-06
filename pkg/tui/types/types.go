@@ -48,6 +48,14 @@ type Message struct {
 	// ToolResultExpanded controls whether long tool result output is expanded in the UI.
 	// This is per-tool-call state and does not persist to the session log.
 	ToolResultExpanded bool
+
+	// ToolResultScrollOffset is the top line offset for the expanded tool result auto-tail viewport.
+	// Only used for display (non-persistent); not written to session logs.
+	ToolResultScrollOffset int
+	// ToolResultFollow is true when the viewport is auto-following the bottom.
+	ToolResultFollow bool
+	// ToolResultScrollInitialized tracks whether follow/offset have been initialized at least once.
+	ToolResultScrollInitialized bool
 }
 
 func Agent(typ MessageType, agentName, content string) *Message {

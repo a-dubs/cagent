@@ -79,7 +79,10 @@ func render(msg *types.Message, s spinner.Spinner, sessionState service.SessionS
 
 	// New file: show a "new file" indicator + content preview (10-line expansion behavior).
 	if meta.IsNew {
-		preview, _ := toolcommon.FormatToolResultExpandable(meta.NewContent, width, msg.ToolResultExpanded)
+		// Reuse the tool result auto-tail behavior for large new file previews.
+		previewMsg := *msg
+		previewMsg.Content = meta.NewContent
+		preview, _ := toolcommon.FormatToolResultExpandableWithAutoTail(&previewMsg, width, msg.ToolResultExpanded)
 
 		title := styles.DiffAddStyle.Render("new file")
 		if meta.NewTruncated {

@@ -25,6 +25,7 @@ import (
 	"github.com/docker/cagent/pkg/tui/components/scrollbar"
 	"github.com/docker/cagent/pkg/tui/components/tool"
 	"github.com/docker/cagent/pkg/tui/components/tool/editfile"
+	"github.com/docker/cagent/pkg/tui/components/toolcommon"
 	"github.com/docker/cagent/pkg/tui/core"
 	"github.com/docker/cagent/pkg/tui/core/layout"
 	"github.com/docker/cagent/pkg/tui/messages"
@@ -416,12 +417,73 @@ func (m *model) handleMouseRelease(msg tea.MouseReleaseMsg) (layout.Model, tea.C
 }
 
 func (m *model) handleMouseWheel(msg tea.MouseWheelMsg) (layout.Model, tea.Cmd) {
+	// Route wheel into inner scrollable regions (reasoning/tool output) when hovered.
+	line, _ := m.mouseToLineCol(msg.X, msg.Y)
+	msgIdx, localLine := m.globalLineToMessageLine(line)
+
+	delta := 0
 	switch msg.Button.String() {
 	case "wheelup":
-		m.scrollByWheel(-1)
+		delta = -1
 	case "wheeldown":
-		m.scrollByWheel(1)
+		delta = 1
 	}
+	if delta == 0 {
+		return m, nil
+	}
+
+	// Make inner scrolling feel similar to outer wheel scroll speed.
+	innerDelta := delta * wheelScrollAmount
+
+	if msgIdx >= 0 && msgIdx < len(m.views) {
+		if block, ok := m.views[msgIdx].(*reasoningblock.Model); ok {
+			if block.HandleWheel(localLine, innerDelta) {
+				m.userHasScrolled = true // don't auto-jump
+				m.bottomSlack = 0
+				m.invalidateItem(msgIdx)
+				return m, nil
+			}
+		}
+	}
+
+	// Tool result viewport wheel routing (expanded long results and streaming shell output).
+	if msgIdx >= 0 && msgIdx < len(m.messages) && !m.sessionState.HideToolResults() {
+		tmsg := m.messages[msgIdx]
+		if tmsg != nil && tmsg.Type == types.MessageTypeToolCall {
+			item := m.renderItem(msgIdx, m.views[msgIdx])
+			start, end, ok := toolcommon.ResultBlockRange(item.view)
+			if ok && localLine >= start && localLine < end {
+				maxOffset := toolcommon.ToolResultMaxOffset(tmsg, m.contentWidth())
+				if !tmsg.ToolResultScrollInitialized {
+					tmsg.ToolResultFollow = true
+					tmsg.ToolResultScrollOffset = maxOffset
+					tmsg.ToolResultScrollInitialized = true
+				}
+
+				// Cursor-like follow semantics.
+				if tmsg.ToolResultFollow && innerDelta < 0 {
+					tmsg.ToolResultFollow = false
+					tmsg.ToolResultScrollOffset = maxOffset
+				}
+
+				tmsg.ToolResultScrollOffset = max(0, min(tmsg.ToolResultScrollOffset+innerDelta, maxOffset))
+				if tmsg.ToolResultScrollOffset >= maxOffset {
+					tmsg.ToolResultFollow = true
+					tmsg.ToolResultScrollOffset = maxOffset
+				} else {
+					tmsg.ToolResultFollow = false
+				}
+
+				m.userHasScrolled = true
+				m.bottomSlack = 0
+				m.invalidateItem(msgIdx)
+				return m, nil
+			}
+		}
+	}
+
+	// Fallback: scroll the main message list.
+	m.scrollByWheel(delta)
 	return m, nil
 }
 
