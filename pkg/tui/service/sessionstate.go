@@ -37,6 +37,7 @@ type SessionState struct {
 	thinking               bool
 	hideToolResults        bool
 	sessionTitle           string
+	workingDir             string
 
 	previousMessage  *types.Message
 	currentAgentName string
@@ -52,6 +53,7 @@ func NewSessionState(s *session.Session) *SessionState {
 		thinking:               s.Thinking,
 		hideToolResults:        s.HideToolResults,
 		sessionTitle:           s.Title,
+		workingDir:             s.WorkingDir,
 	}
 }
 
@@ -126,6 +128,14 @@ func (s *SessionState) SessionTitle() string {
 
 func (s *SessionState) SetSessionTitle(sessionTitle string) {
 	s.sessionTitle = sessionTitle
+}
+
+func (s *SessionState) WorkingDir() string {
+	return s.workingDir
+}
+
+func (s *SessionState) SetWorkingDir(workingDir string) {
+	s.workingDir = workingDir
 }
 
 func (s *SessionState) AvailableAgents() []runtime.AgentDetails {

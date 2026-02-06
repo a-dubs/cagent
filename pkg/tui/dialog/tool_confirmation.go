@@ -2,6 +2,10 @@ package dialog
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -10,7 +14,9 @@ import (
 
 	"github.com/docker/cagent/pkg/runtime"
 	"github.com/docker/cagent/pkg/tools"
+	"github.com/docker/cagent/pkg/tools/builtin"
 	"github.com/docker/cagent/pkg/tui/components/messages"
+	"github.com/docker/cagent/pkg/tui/components/tool/editfile"
 	"github.com/docker/cagent/pkg/tui/core"
 	"github.com/docker/cagent/pkg/tui/core/layout"
 	"github.com/docker/cagent/pkg/tui/service"
@@ -45,6 +51,8 @@ type toolConfirmationDialog struct {
 	sessionState      *service.SessionState
 	scrollView        messages.Model
 	permissionPattern string // cached permission pattern for this tool call
+	previewTitle      string
+	previewContent    string
 }
 
 // dialogDimensions returns computed dialog width and content width.
@@ -181,12 +189,89 @@ func NewToolConfirmationDialog(msg *runtime.ToolCallConfirmationEvent, sessionSt
 	// Build and cache the permission pattern for display and use
 	pattern := buildPermissionPattern(msg.ToolCall)
 
+	previewTitle, previewContent := buildWritePreview(msg.ToolCall, sessionState)
+
 	return &toolConfirmationDialog{
 		msg:               msg,
 		sessionState:      sessionState,
 		keyMap:            defaultToolConfirmationKeyMap(),
 		scrollView:        scrollView,
 		permissionPattern: pattern,
+		previewTitle:      previewTitle,
+		previewContent:    previewContent,
+	}
+}
+
+func buildWritePreview(toolCall tools.ToolCall, sessionState *service.SessionState) (title, content string) {
+	wd := ""
+	if sessionState != nil {
+		wd = sessionState.WorkingDir()
+	}
+	if wd == "" {
+		return "", ""
+	}
+
+	switch toolCall.Function.Name {
+	case builtin.ToolNameWriteFile:
+		var args builtin.WriteFileArgs
+		if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+			return "", ""
+		}
+		if args.Path == "" {
+			return "", ""
+		}
+
+		abs := args.Path
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(wd, abs)
+		}
+
+		oldBytes, err := os.ReadFile(abs)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// New file preview: show content in a framed block.
+				return fmt.Sprintf("Preview (new file: %s)", args.Path), args.Content
+			}
+			return fmt.Sprintf("Preview (write_file: %s)", args.Path), fmt.Sprintf("Could not read existing file: %v", err)
+		}
+
+		diff := editfile.RenderTextDiff(args.Path, string(oldBytes), args.Content, 120, false, types.ToolStatusConfirmation)
+		return fmt.Sprintf("Preview (diff: %s)", args.Path), diff
+
+	case builtin.ToolNameEditFile:
+		var args builtin.EditFileArgs
+		if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+			return "", ""
+		}
+		if args.Path == "" {
+			return "", ""
+		}
+
+		abs := args.Path
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(wd, abs)
+		}
+
+		oldBytes, err := os.ReadFile(abs)
+		if err != nil {
+			return fmt.Sprintf("Preview (edit_file: %s)", args.Path), fmt.Sprintf("Could not read file: %v", err)
+		}
+
+		newContent := string(oldBytes)
+		for _, e := range args.Edits {
+			if e.OldText == "" {
+				continue
+			}
+			if !strings.Contains(newContent, e.OldText) {
+				return fmt.Sprintf("Preview (edit_file: %s)", args.Path), "Could not preview edits: old text not found in file."
+			}
+			newContent = strings.Replace(newContent, e.OldText, e.NewText, 1)
+		}
+
+		diff := editfile.RenderTextDiff(args.Path, string(oldBytes), newContent, 120, false, types.ToolStatusConfirmation)
+		return fmt.Sprintf("Preview (diff: %s)", args.Path), diff
+	default:
+		return "", ""
 	}
 }
 
@@ -280,6 +365,13 @@ func (d *toolConfirmationDialog) View() string {
 
 	if argumentsSection != "" {
 		parts = append(parts, "", argumentsSection)
+	}
+
+	if d.previewContent != "" {
+		parts = append(parts, "")
+		parts = append(parts, styles.DialogContentStyle.Bold(true).Width(contentWidth).Render(d.previewTitle))
+
+		parts = append(parts, styles.ToolCallResult.Render(d.previewContent))
 	}
 
 	// Confirmation prompt
