@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/docker/cagent/pkg/paths"
 	"github.com/docker/cagent/pkg/tools"
@@ -120,6 +121,11 @@ func Icon(msg *types.Message, inProgress spinner.Spinner) string {
 }
 
 func FormatToolResult(content string, width int) string {
+	// Display-only cleanup: tool outputs (especially shell) can contain ANSI escape
+	// sequences that pollute the transcript. Strip them here in the shared
+	// formatting layer so all tool renderers benefit.
+	content = ansi.Strip(content)
+
 	var formattedContent string
 	var m map[string]any
 	if err := json.Unmarshal([]byte(content), &m); err != nil {

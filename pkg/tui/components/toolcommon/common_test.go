@@ -1,11 +1,22 @@
 package toolcommon
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestFormatToolResult_StripsANSI(t *testing.T) {
+	t.Parallel()
+
+	in := "\x1b[31mred\x1b[0m normal \x1b[1;32mgreen\x1b[0m"
+	out := FormatToolResult(in, 120)
+
+	assert.NotContains(t, out, "\x1b[", "ANSI escape sequences should be stripped for display formatting")
+	assert.Equal(t, "red normal green", strings.TrimSpace(out))
+}
 
 func TestTryFixPartialJSON(t *testing.T) {
 	tests := []struct {
