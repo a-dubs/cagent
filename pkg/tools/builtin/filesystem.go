@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/docker/cagent/pkg/fsx"
 	"github.com/docker/cagent/pkg/tools"
@@ -101,6 +102,26 @@ type DirectoryTreeArgs struct {
 type WriteFileArgs struct {
 	Path    string `json:"path" jsonschema:"The file path to write"`
 	Content string `json:"content" jsonschema:"The content to write to the file"`
+}
+
+const writeFileMetaMaxBytes = 200 * 1024
+
+type WriteFileMeta struct {
+	Path string `json:"path"`
+
+	// IsNew indicates the target file did not exist prior to the write.
+	IsNew bool `json:"isNew"`
+
+	// OldContent/NewContent are best-effort snapshots (possibly truncated) captured
+	// before and after the write so UIs can compute a diff.
+	OldContent string `json:"oldContent,omitempty"`
+	NewContent string `json:"newContent,omitempty"`
+
+	OldTruncated bool `json:"oldTruncated,omitempty"`
+	NewTruncated bool `json:"newTruncated,omitempty"`
+
+	OldSizeBytes int `json:"oldSizeBytes,omitempty"`
+	NewSizeBytes int `json:"newSizeBytes,omitempty"`
 }
 
 type ReadMultipleFilesArgs struct {
@@ -688,6 +709,27 @@ func (t *FilesystemTool) handleSearchFilesContent(_ context.Context, args Search
 func (t *FilesystemTool) handleWriteFile(ctx context.Context, args WriteFileArgs) (*tools.ToolCallResult, error) {
 	resolvedPath := t.resolvePath(args.Path)
 
+	meta := WriteFileMeta{
+		Path: args.Path,
+	}
+
+	// Best-effort capture of pre-write content for overwrite diffs.
+	// Errors should not change write behavior; they're intentionally ignored.
+	if st, err := os.Stat(resolvedPath); err == nil && !st.IsDir() {
+		meta.IsNew = false
+		if oldBytes, err := os.ReadFile(resolvedPath); err == nil {
+			meta.OldSizeBytes = len(oldBytes)
+			meta.OldContent, meta.OldTruncated = truncateForToolMetaBytes(oldBytes, writeFileMetaMaxBytes)
+		} else {
+			meta.OldSizeBytes = int(st.Size())
+		}
+	} else if err != nil && os.IsNotExist(err) {
+		meta.IsNew = true
+	}
+
+	meta.NewSizeBytes = len(args.Content)
+	meta.NewContent, meta.NewTruncated = truncateForToolMetaString(args.Content, writeFileMetaMaxBytes)
+
 	// Create parent directory structure if it doesn't exist
 	dir := filepath.Dir(resolvedPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -702,7 +744,10 @@ func (t *FilesystemTool) handleWriteFile(ctx context.Context, args WriteFileArgs
 		return tools.ResultError(fmt.Sprintf("File written successfully but post-edit command failed: %s", err)), nil
 	}
 
-	return tools.ResultSuccess(fmt.Sprintf("File written successfully: %s (%d bytes)", args.Path, len(args.Content))), nil
+	return &tools.ToolCallResult{
+		Output: fmt.Sprintf("File written successfully: %s (%d bytes)", args.Path, len(args.Content)),
+		Meta:   meta,
+	}, nil
 }
 
 // matchExcludePattern checks if a path should be excluded based on the exclude pattern
@@ -740,4 +785,24 @@ func matchExcludePattern(pattern, relPath string) bool {
 	}
 
 	return false
+}
+
+func truncateForToolMetaString(s string, maxBytes int) (out string, truncated bool) {
+	return truncateForToolMetaBytes([]byte(s), maxBytes)
+}
+
+func truncateForToolMetaBytes(b []byte, maxBytes int) (out string, truncated bool) {
+	if maxBytes <= 0 {
+		return "", len(b) > 0
+	}
+	if len(b) <= maxBytes {
+		return string(b), false
+	}
+
+	// Ensure we don't cut in the middle of a UTF-8 sequence.
+	cut := b[:maxBytes]
+	for len(cut) > 0 && !utf8.Valid(cut) {
+		cut = cut[:len(cut)-1]
+	}
+	return string(cut), true
 }

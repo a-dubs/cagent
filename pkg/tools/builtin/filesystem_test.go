@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -80,6 +81,95 @@ func TestFilesystemTool_WriteFile(t *testing.T) {
 	writtenContent, err := os.ReadFile(filepath.Join(tmpDir, testFile))
 	require.NoError(t, err)
 	assert.Equal(t, content, string(writtenContent))
+}
+
+func TestFilesystemTool_WriteFile_Meta_NewFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	tool := NewFilesystemTool(tmpDir)
+
+	testFile := "new.txt"
+	content := "new content"
+
+	result, err := tool.handleWriteFile(t.Context(), WriteFileArgs{
+		Path:    testFile,
+		Content: content,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	meta, ok := result.Meta.(WriteFileMeta)
+	require.True(t, ok, "expected WriteFileMeta, got %T", result.Meta)
+
+	assert.Equal(t, testFile, meta.Path)
+	assert.True(t, meta.IsNew)
+	assert.Empty(t, meta.OldContent)
+	assert.False(t, meta.OldTruncated)
+	assert.Equal(t, len(content), meta.NewSizeBytes)
+	assert.Equal(t, content, meta.NewContent)
+	assert.False(t, meta.NewTruncated)
+}
+
+func TestFilesystemTool_WriteFile_Meta_Overwrite(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	tool := NewFilesystemTool(tmpDir)
+
+	testFile := "overwrite.txt"
+	oldContent := "old"
+	newContent := "new"
+
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, testFile), []byte(oldContent), 0o644))
+
+	result, err := tool.handleWriteFile(t.Context(), WriteFileArgs{
+		Path:    testFile,
+		Content: newContent,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	meta, ok := result.Meta.(WriteFileMeta)
+	require.True(t, ok, "expected WriteFileMeta, got %T", result.Meta)
+
+	assert.Equal(t, testFile, meta.Path)
+	assert.False(t, meta.IsNew)
+	assert.Equal(t, len(oldContent), meta.OldSizeBytes)
+	assert.Equal(t, oldContent, meta.OldContent)
+	assert.False(t, meta.OldTruncated)
+	assert.Equal(t, len(newContent), meta.NewSizeBytes)
+	assert.Equal(t, newContent, meta.NewContent)
+	assert.False(t, meta.NewTruncated)
+}
+
+func TestFilesystemTool_WriteFile_Meta_Truncation(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	tool := NewFilesystemTool(tmpDir)
+
+	testFile := "big.txt"
+	oldContent := strings.Repeat("a", writeFileMetaMaxBytes+1024)
+	newContent := strings.Repeat("b", writeFileMetaMaxBytes+2048)
+
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, testFile), []byte(oldContent), 0o644))
+
+	result, err := tool.handleWriteFile(t.Context(), WriteFileArgs{
+		Path:    testFile,
+		Content: newContent,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	meta, ok := result.Meta.(WriteFileMeta)
+	require.True(t, ok, "expected WriteFileMeta, got %T", result.Meta)
+
+	assert.False(t, meta.IsNew)
+	assert.Equal(t, len(oldContent), meta.OldSizeBytes)
+	assert.True(t, meta.OldTruncated)
+	assert.LessOrEqual(t, len([]byte(meta.OldContent)), writeFileMetaMaxBytes)
+
+	assert.Equal(t, len(newContent), meta.NewSizeBytes)
+	assert.True(t, meta.NewTruncated)
+	assert.LessOrEqual(t, len([]byte(meta.NewContent)), writeFileMetaMaxBytes)
 }
 
 func TestFilesystemTool_WriteFile_NestedDirectory(t *testing.T) {
