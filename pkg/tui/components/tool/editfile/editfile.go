@@ -66,7 +66,7 @@ func render(
 
 	// Check for friendly description first
 	var content string
-	if header, ok := toolcommon.RenderFriendlyHeader(msg, s); ok {
+	if header, ok := toolcommon.RenderFriendlyHeader(msg, s, styles.ToolName); ok {
 		content = header
 	} else {
 		content = fmt.Sprintf(

@@ -1158,9 +1158,10 @@ func (r *LocalRuntime) handleStream(ctx context.Context, stream chat.MessageStre
 				sess.Cost += cost / 1e6
 			}
 
-			// Accumulate session token usage across turns (stream usage is per-call).
-			sess.InputTokens += response.Usage.InputTokens + response.Usage.CachedInputTokens + response.Usage.CacheWriteTokens
-			sess.OutputTokens += response.Usage.OutputTokens
+			// Session-level token fields represent the most recent model call's usage
+			// (prompt+completion), not a running total across the session.
+			sess.InputTokens = response.Usage.InputTokens + response.Usage.CachedInputTokens + response.Usage.CacheWriteTokens
+			sess.OutputTokens = response.Usage.OutputTokens
 
 			modelName := "unknown"
 			if m != nil {

@@ -679,9 +679,9 @@ func (m mockModelStoreWithLimit) GetModel(context.Context, string) (*modelsdev.M
 	return &modelsdev.Model{Limit: modelsdev.Limit{Context: m.limit}, Cost: &modelsdev.Cost{}}, nil
 }
 
-func TestTokenUsageAccumulatesAcrossTurns(t *testing.T) {
-	// Regression test: session token totals must accumulate across turns,
-	// rather than being overwritten by the latest stream's usage.
+func TestTokenUsageIsLatestCallOnly(t *testing.T) {
+	// Regression test: session token fields represent the latest model call's usage
+	// (prompt+completion), rather than accumulating across turns.
 	firstStream := newStreamBuilder().
 		AddContent("first").
 		AddStopWithUsage(3, 2).
@@ -713,8 +713,8 @@ func TestTokenUsageAccumulatesAcrossTurns(t *testing.T) {
 	for range rt.RunStream(t.Context(), sess) {
 	}
 
-	require.EqualValues(t, 8, sess.InputTokens, "input tokens should accumulate across turns")
-	require.EqualValues(t, 9, sess.OutputTokens, "output tokens should accumulate across turns")
+	require.EqualValues(t, 5, sess.InputTokens, "input tokens should reflect the latest call")
+	require.EqualValues(t, 7, sess.OutputTokens, "output tokens should reflect the latest call")
 }
 
 func TestCompaction(t *testing.T) {

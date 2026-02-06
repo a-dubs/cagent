@@ -151,7 +151,7 @@ func (p *chatPage) handleTokenUsage(msg *runtime.TokenUsageEvent) {
 	p.sidebar.SetTokenUsage(msg)
 	if msg.Usage != nil {
 		if sess := p.app.Session(); sess != nil {
-			// Update session-level totals
+			// Update session-level "latest call" usage (used for context/compaction indicators).
 			sess.InputTokens = msg.Usage.InputTokens
 			sess.OutputTokens = msg.Usage.OutputTokens
 			sess.Cost = msg.Usage.Cost
