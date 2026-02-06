@@ -22,6 +22,59 @@ func TestFormatToolResult_StripsANSI(t *testing.T) {
 	assert.Equal(t, "red normal green", strings.TrimSpace(out))
 }
 
+func TestFormatToolResultExpandable_CollapsedVsExpanded(t *testing.T) {
+	t.Parallel()
+
+	// 11 lines -> overflow.
+	in := strings.Join([]string{
+		"line1",
+		"line2",
+		"line3",
+		"line4",
+		"line5",
+		"line6",
+		"line7",
+		"line8",
+		"line9",
+		"line10",
+		"line11",
+	}, "\n")
+
+	collapsed, overflow := FormatToolResultExpandable(in, 120, false)
+	require.True(t, overflow)
+	assert.Contains(t, collapsed, "line10")
+	assert.NotContains(t, collapsed, "line11")
+	assert.Contains(t, collapsed, "click to expand")
+
+	expanded, overflow := FormatToolResultExpandable(in, 120, true)
+	require.True(t, overflow)
+	assert.Contains(t, expanded, "line11")
+	assert.Contains(t, expanded, "click to collapse")
+}
+
+func TestFormatToolResultExpandable_NoOverflow_NoHint(t *testing.T) {
+	t.Parallel()
+
+	in := strings.Join([]string{
+		"line1",
+		"line2",
+		"line3",
+		"line4",
+		"line5",
+		"line6",
+		"line7",
+		"line8",
+		"line9",
+		"line10",
+	}, "\n")
+
+	out, overflow := FormatToolResultExpandable(in, 120, false)
+	require.False(t, overflow)
+	assert.Contains(t, out, "line10")
+	assert.NotContains(t, out, "click to expand")
+	assert.NotContains(t, out, "click to collapse")
+}
+
 func TestRenderTool_DeniedOrRejectedToolCallUsesStrikethroughStyle(t *testing.T) {
 	t.Parallel()
 

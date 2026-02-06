@@ -26,7 +26,7 @@ func render(msg *types.Message, s spinner.Spinner, sessionState service.SessionS
 
 	var resultContent string
 	if (msg.ToolStatus == types.ToolStatusCompleted || msg.ToolStatus == types.ToolStatusError) && msg.Content != "" {
-		resultContent = toolcommon.FormatToolResult(msg.Content, width)
+		resultContent, _ = toolcommon.FormatToolResultExpandable(msg.Content, width, msg.ToolResultExpanded)
 	}
 
 	return toolcommon.RenderTool(msg, s, argsContent, resultContent, width, sessionState.HideToolResults())

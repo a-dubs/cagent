@@ -43,6 +43,10 @@ type Message struct {
 	ToolDefinition tools.Tool            // Definition of the tool being called
 	ToolStatus     ToolStatus            // Status for tool calls
 	ToolResult     *tools.ToolCallResult // Result of tool call (when completed)
+
+	// ToolResultExpanded controls whether long tool result output is expanded in the UI.
+	// This is per-tool-call state and does not persist to the session log.
+	ToolResultExpanded bool
 }
 
 func Agent(typ MessageType, agentName, content string) *Message {

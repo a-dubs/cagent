@@ -121,6 +121,17 @@ func Icon(msg *types.Message, inProgress spinner.Spinner) string {
 }
 
 func FormatToolResult(content string, width int) string {
+	out, _ := FormatToolResultExpandable(content, width, false)
+	return out
+}
+
+// FormatToolResultExpandable formats a tool result for display and optionally expands it.
+//
+// - If the wrapped output is <= 10 lines, it returns the full output and hasOverflow=false.
+// - If > 10 lines:
+//   - When expanded=false: show first 10 lines + a muted "… click to expand …" hint.
+//   - When expanded=true: show full output + a muted "click to collapse" hint.
+func FormatToolResultExpandable(content string, width int, expanded bool) (formatted string, hasOverflow bool) {
 	// Display-only cleanup: tool outputs (especially shell) can contain ANSI escape
 	// sequences that pollute the transcript. Strip them here in the shared
 	// formatting layer so all tool renderers benefit.
@@ -140,12 +151,21 @@ func FormatToolResult(content string, width int) string {
 
 	lines := WrapLines(formattedContent, availableWidth)
 
-	if len(lines) > 10 {
-		lines = lines[:10]
-		lines = append(lines, WrapLines("…", availableWidth)...)
+	if len(lines) <= 10 {
+		return strings.Join(lines, "\n"), false
 	}
 
-	return strings.Join(lines, "\n")
+	if expanded {
+		hint := styles.MutedStyle.Italic(true).Render("click to collapse")
+		lines = append(lines, WrapLines(hint, availableWidth)...)
+		return strings.Join(lines, "\n"), true
+	}
+
+	// Collapsed.
+	hint := styles.MutedStyle.Italic(true).Render("… click to expand …")
+	lines = append(lines[:10], WrapLines(hint, availableWidth)...)
+
+	return strings.Join(lines, "\n"), true
 }
 
 func RenderTool(msg *types.Message, inProgress spinner.Spinner, args, result string, width int, hideToolResults bool) string {

@@ -282,6 +282,29 @@ func (m *model) handleMouseClick(msg tea.MouseClickMsg) (layout.Model, tea.Cmd) 
 
 	clickCount := m.selection.detectClickType(line, col)
 
+	// Check for tool result expand/collapse toggle.
+	//
+	// This is intentionally restricted to single-clicks on the hint line so it
+	// doesn't interfere with normal text selection (drag, double-click word
+	// selection, triple-click line selection).
+	if clickCount == 1 {
+		if msgIdx, _ := m.globalLineToMessageLine(line); msgIdx >= 0 && msgIdx < len(m.messages) {
+			if m.messages[msgIdx].Type == types.MessageTypeToolCall {
+				m.ensureAllItemsRendered()
+				if line >= 0 && line < len(m.renderedLines) {
+					plain := strings.TrimSpace(ansi.Strip(m.renderedLines[line]))
+					if strings.Contains(plain, "click to expand") || strings.Contains(plain, "click to collapse") {
+						m.messages[msgIdx].ToolResultExpanded = !m.messages[msgIdx].ToolResultExpanded
+						m.userHasScrolled = true
+						m.bottomSlack = 0
+						m.invalidateItem(msgIdx)
+						return m, nil
+					}
+				}
+			}
+		}
+	}
+
 	switch clickCount {
 	case 3: // Triple-click: select line
 		m.selectLineAt(line)
