@@ -219,6 +219,16 @@ func (d *toolConfirmationDialog) Update(msg tea.Msg) (layout.Model, tea.Cmd) {
 				Model: NewToolRejectionReasonDialog(),
 			})
 		case key.Matches(msg, d.keyMap.All):
+			// When --yolo-except-writes is active, "approve all" should not switch into
+			// full YOLO mode (which would also auto-approve writes). Instead, treat it
+			// like "approve this call" and keep future write confirmations enabled.
+			if d.sessionState.YoloExceptWrites() {
+				return d, tea.Sequence(
+					core.CmdHandler(CloseDialogMsg{}),
+					core.CmdHandler(RuntimeResumeMsg{Request: runtime.ResumeApprove()}),
+				)
+			}
+
 			d.sessionState.SetYoloMode(true)
 			return d, tea.Sequence(
 				core.CmdHandler(CloseDialogMsg{}),
@@ -274,7 +284,11 @@ func (d *toolConfirmationDialog) View() string {
 
 	// Confirmation prompt
 	question := styles.DialogQuestionStyle.Width(contentWidth).Render("Do you want to allow this tool call?")
-	options := RenderHelpKeys(contentWidth, "Y", "yes", "N", "no", "T", d.alwaysAllowHelpText(), "A", "all tools")
+	allToolsLabel := "all tools"
+	if d.sessionState.YoloExceptWrites() {
+		allToolsLabel = "all tools (except writes)"
+	}
+	options := RenderHelpKeys(contentWidth, "Y", "yes", "N", "no", "T", d.alwaysAllowHelpText(), "A", allToolsLabel)
 
 	parts = append(parts, "", question, "", options)
 

@@ -13,6 +13,7 @@ type SessionStateReader interface {
 	SplitDiffView() bool
 	HasExplicitDiffPreference() bool
 	YoloMode() bool
+	YoloExceptWrites() bool
 	Thinking() bool
 	HideToolResults() bool
 	CurrentAgentName() string
@@ -32,6 +33,7 @@ type SessionState struct {
 	splitDiffView          bool
 	explicitDiffPreference bool
 	yoloMode               bool
+	yoloExceptWrites       bool
 	thinking               bool
 	hideToolResults        bool
 	sessionTitle           string
@@ -46,6 +48,7 @@ func NewSessionState(s *session.Session) *SessionState {
 		splitDiffView:          true,
 		explicitDiffPreference: false,
 		yoloMode:               s.ToolsApproved,
+		yoloExceptWrites:       s.YoloExceptWrites,
 		thinking:               s.Thinking,
 		hideToolResults:        s.HideToolResults,
 		sessionTitle:           s.Title,
@@ -71,6 +74,14 @@ func (s *SessionState) YoloMode() bool {
 
 func (s *SessionState) SetYoloMode(yoloMode bool) {
 	s.yoloMode = yoloMode
+}
+
+func (s *SessionState) YoloExceptWrites() bool {
+	return s.yoloExceptWrites
+}
+
+func (s *SessionState) SetYoloExceptWrites(yoloExceptWrites bool) {
+	s.yoloExceptWrites = yoloExceptWrites
 }
 
 func (s *SessionState) Thinking() bool {

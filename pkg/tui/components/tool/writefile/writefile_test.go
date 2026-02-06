@@ -15,6 +15,7 @@ type testSessionState struct{}
 func (testSessionState) SplitDiffView() bool                         { return false }
 func (testSessionState) HasExplicitDiffPreference() bool             { return false }
 func (testSessionState) YoloMode() bool                              { return false }
+func (testSessionState) YoloExceptWrites() bool                      { return false }
 func (testSessionState) Thinking() bool                              { return false }
 func (testSessionState) HideToolResults() bool                        { return false }
 func (testSessionState) CurrentAgentName() string                     { return "" }
