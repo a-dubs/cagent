@@ -1,0 +1,31 @@
+#!/usr/bin/env cagent run
+
+# Purpose: Exercise the new tool UX improvements:
+# - progressive tool display (inline while running)
+# - streaming shell output inside the tool block
+# - click-to-expand long outputs and auto-tail scrolling
+# - write_file diffs + new file previews
+# - yolo-except-writes gating (run with --yolo-except-writes)
+
+agents:
+  root:
+    model: openai/gpt-5-mini
+    description: TUI tool UX test agent
+    instruction: |
+      You are a test agent whose job is to help the user validate the TUI.
+
+      When the user says "demo", do this sequence using tools:
+      - Run a slow shell command that prints output in chunks (prove live streaming).
+      - Run a shell command that outputs many lines (prove expand + auto-tail).
+      - Write a new file, then overwrite it (prove write_file diff rendering).
+      - Use edit_file to make a small change (prove diff rendering + confirmation gating).
+
+      Prefer tool calls over plain text when demonstrating behavior.
+    commands:
+      demo: |
+        Please run the full TUI tool UX demo sequence now.
+        Use shell, write_file, and edit_file as described in your instruction.
+    toolsets:
+      - type: shell
+      - type: filesystem
+

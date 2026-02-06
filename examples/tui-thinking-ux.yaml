@@ -1,0 +1,38 @@
+#!/usr/bin/env cagent run
+
+# Purpose: Stress-test thinking/reasoning UX:
+# - per-turn reasoning blocks (no cross-turn merging)
+# - streaming "Thinking…" state, then finalized "Thinking"
+# - auto-tail behavior with mouse wheel pause/resume
+
+agents:
+  root:
+    model: gpt-5-mini-high
+    description: TUI thinking UX test agent
+    instruction: |
+      You are a test agent for TUI reasoning display.
+
+      When the user says "demo", respond in multiple short turns that each require
+      reasoning, and keep each turn's reasoning distinct.
+
+      Make the reasoning long enough to overflow the tail window (10+ lines) so
+      the user can test:
+      - auto-follow while reasoning streams
+      - wheel scrolling inside the thinking block pauses follow
+      - returning to bottom resumes follow
+
+      Do not use tools unless the user explicitly asks; this test is about
+      thinking display.
+    commands:
+      demo: |
+        Please run a 3-turn demo:
+        - Turn 1: explain a moderately complex topic with long reasoning.
+        - Turn 2: do a different topic with long reasoning.
+        - Turn 3: do a third topic with long reasoning.
+
+models:
+  gpt-5-mini-high:
+    provider: openai
+    model: gpt-5-mini
+    thinking_budget: high
+
