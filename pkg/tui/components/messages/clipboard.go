@@ -8,9 +8,23 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
-
-	"github.com/docker/cagent/pkg/tui/components/notification"
 )
+
+const selectionCopyToastThrottle = 750 * time.Millisecond
+
+type clipboardCopySource int
+
+const (
+	clipboardCopySourceUnknown clipboardCopySource = iota
+	clipboardCopySourceSelection
+	clipboardCopySourceSelectionAuto
+	clipboardCopySourceMessage
+)
+
+type clipboardWriteResultMsg struct {
+	Source clipboardCopySource
+	Err    error
+}
 
 // boxDrawingChars contains Unicode box-drawing characters used by lipgloss borders.
 // These need to be stripped when copying text to clipboard.
@@ -154,7 +168,7 @@ func (m *model) extractSelectedText() string {
 }
 
 // copySelectionToClipboard copies the currently selected text to clipboard
-func (m *model) copySelectionToClipboard() tea.Cmd {
+func (m *model) copySelectionToClipboard(source clipboardCopySource) tea.Cmd {
 	if !m.selection.active {
 		return nil
 	}
@@ -164,7 +178,7 @@ func (m *model) copySelectionToClipboard() tea.Cmd {
 		return nil
 	}
 
-	return copyTextToClipboard(selectedText)
+	return copyTextToClipboard(selectedText, source)
 }
 
 // copySelectedMessageToClipboard copies the content of the selected message to clipboard
@@ -180,18 +194,17 @@ func (m *model) copySelectedMessageToClipboard() tea.Cmd {
 		return nil
 	}
 
-	return copyTextToClipboard(content)
+	return copyTextToClipboard(content, clipboardCopySourceMessage)
 }
 
 // copyTextToClipboard copies text to the system clipboard
-func copyTextToClipboard(text string) tea.Cmd {
-	return tea.Sequence(
+func copyTextToClipboard(text string, source clipboardCopySource) tea.Cmd {
+	return tea.Batch(
 		tea.SetClipboard(text),
 		func() tea.Msg {
-			_ = clipboard.WriteAll(text)
-			return nil
+			err := clipboard.WriteAll(text)
+			return clipboardWriteResultMsg{Source: source, Err: err}
 		},
-		notification.SuccessCmd("Text copied to clipboard."),
 	)
 }
 
@@ -207,7 +220,7 @@ func (m *model) scheduleDebouncedCopy() tea.Cmd {
 // handleDebouncedCopy executes copy only if no subsequent click invalidated it.
 func (m *model) handleDebouncedCopy(msg DebouncedCopyMsg) tea.Cmd {
 	if msg.ClickID == m.selection.pendingCopyID {
-		return m.copySelectionToClipboard()
+		return m.copySelectionToClipboard(clipboardCopySourceSelection)
 	}
 	return nil
 }

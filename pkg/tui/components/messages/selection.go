@@ -21,6 +21,9 @@ type selectionState struct {
 	mouseButtonDown bool
 	mouseY          int // Screen Y coordinate for autoscroll
 
+	// Throttle selection copy notifications (to avoid spam).
+	lastCopyToast time.Time
+
 	// Multi-click detection
 	lastClickTime time.Time
 	lastClickLine int

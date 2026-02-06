@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -19,6 +20,7 @@ import (
 	"github.com/docker/cagent/pkg/tools/builtin"
 	"github.com/docker/cagent/pkg/tui/animation"
 	"github.com/docker/cagent/pkg/tui/components/message"
+	"github.com/docker/cagent/pkg/tui/components/notification"
 	"github.com/docker/cagent/pkg/tui/components/reasoningblock"
 	"github.com/docker/cagent/pkg/tui/components/scrollbar"
 	"github.com/docker/cagent/pkg/tui/components/tool"
@@ -179,6 +181,29 @@ func (m *model) Update(msg tea.Msg) (layout.Model, tea.Cmd) {
 		cmd := m.handleDebouncedCopy(msg)
 		return m, cmd
 
+	case clipboardWriteResultMsg:
+		if msg.Err != nil {
+			// Avoid spamming users with clipboard failures.
+			return m, nil
+		}
+
+		switch msg.Source {
+		case clipboardCopySourceSelectionAuto:
+			// Throttle selection copy toasts to keep things subtle.
+			now := time.Now()
+			if !m.selection.lastCopyToast.IsZero() && now.Sub(m.selection.lastCopyToast) < selectionCopyToastThrottle {
+				return m, nil
+			}
+			m.selection.lastCopyToast = now
+			return m, notification.SuccessCmd("Copied selection.")
+
+		case clipboardCopySourceMessage:
+			// Preserve existing UX for explicit message copy.
+			return m, notification.SuccessCmd("Text copied to clipboard.")
+		default:
+			return m, nil
+		}
+
 	case editfile.ToggleDiffViewMsg:
 		m.sessionState.ToggleSplitDiffView()
 		m.invalidateAllItems()
@@ -261,7 +286,7 @@ func (m *model) handleMouseClick(msg tea.MouseClickMsg) (layout.Model, tea.Cmd) 
 	case 3: // Triple-click: select line
 		m.selectLineAt(line)
 		m.selection.pendingCopyID++ // Cancel any pending double-click copy
-		cmd := m.copySelectionToClipboard()
+		cmd := m.copySelectionToClipboard(clipboardCopySourceSelection)
 		return m, cmd
 	case 2: // Double-click: select word with debounced copy
 		m.selectWordAt(line, col)
@@ -325,7 +350,7 @@ func (m *model) handleMouseRelease(msg tea.MouseReleaseMsg) (layout.Model, tea.C
 			line, col := m.mouseToLineCol(msg.X, msg.Y)
 			m.selection.update(line, col)
 			m.selection.end()
-			cmd := m.copySelectionToClipboard()
+			cmd := m.copySelectionToClipboard(clipboardCopySourceSelectionAuto)
 			return m, cmd
 		}
 		m.selection.end()
