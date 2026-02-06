@@ -117,6 +117,27 @@ func renderEditFile(toolCall tools.ToolCall, width int, splitView bool, toolStat
 	return result
 }
 
+// RenderTextDiff renders a syntax-highlighted diff between two text blobs.
+// It reuses the edit_file diff implementation so other tools (like write_file)
+// can show diffs without duplicating rendering logic.
+func RenderTextDiff(filePath, oldContent, newContent string, width int, splitView bool, toolStatus types.ToolStatus) string {
+	_ = toolStatus
+	diff := computeDiffFromContents(oldContent, newContent)
+	if splitView {
+		return renderSplitDiffWithSyntaxHighlight(diff, filePath, width)
+	}
+	return renderDiffWithSyntaxHighlight(diff, filePath, width)
+}
+
+func computeDiffFromContents(oldContent, newContent string) []*udiff.Hunk {
+	edits := udiff.Strings(oldContent, newContent)
+	diff, err := udiff.ToUnifiedDiff("old", "new", oldContent, edits, 3)
+	if err != nil {
+		return []*udiff.Hunk{}
+	}
+	return normalizeDiff(diff.Hunks)
+}
+
 func renderEditFileUncached(toolCall tools.ToolCall, width int, splitView bool, toolStatus types.ToolStatus) string {
 	var args builtin.EditFileArgs
 	if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
