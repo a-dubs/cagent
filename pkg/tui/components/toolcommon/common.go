@@ -151,7 +151,9 @@ func FormatToolResult(content string, width int) string {
 func RenderTool(msg *types.Message, inProgress spinner.Spinner, args, result string, width int, hideToolResults bool) string {
 	nameStyle := styles.ToolName
 	resultStyle := styles.ToolMessageStyle
-	if msg.ToolStatus == types.ToolStatusError {
+	if isDeniedOrRejectedToolCall(msg) {
+		nameStyle = styles.ToolNameDenied
+	} else if msg.ToolStatus == types.ToolStatusError {
 		nameStyle = styles.ToolNameError
 		resultStyle = styles.ToolErrorMessageStyle
 	}
@@ -159,12 +161,15 @@ func RenderTool(msg *types.Message, inProgress spinner.Spinner, args, result str
 	icon := Icon(msg, inProgress)
 	name := nameStyle.Render(msg.ToolDefinition.DisplayName())
 
-	if header, ok := RenderFriendlyHeader(msg, inProgress); ok {
+	if header, ok := RenderFriendlyHeader(msg, inProgress, nameStyle); ok {
 		content := header
 		if args != "" {
 			firstLineWidth := width - lipgloss.Width(content) - 1
 			subsequentLineWidth := width - styles.ToolCompletedIcon.GetMarginLeft()
 			wrappedArgs := wrapTextWithIndent(args, firstLineWidth, subsequentLineWidth)
+			if isDeniedOrRejectedToolCall(msg) {
+				wrappedArgs = styles.ToolDeniedStyle.Render(wrappedArgs)
+			}
 			content += " " + wrappedArgs
 		}
 		if result != "" && !hideToolResults {
@@ -188,6 +193,9 @@ func RenderTool(msg *types.Message, inProgress spinner.Spinner, args, result str
 		firstLineWidth := width - lipgloss.Width(content) - 1 // -1 for space before args
 		subsequentLineWidth := width - styles.ToolCompletedIcon.GetMarginLeft()
 		wrappedArgs := wrapTextWithIndent(args, firstLineWidth, subsequentLineWidth)
+		if isDeniedOrRejectedToolCall(msg) {
+			wrappedArgs = styles.ToolDeniedStyle.Render(wrappedArgs)
+		}
 		content += " " + wrappedArgs
 	}
 	if result != "" {
@@ -224,7 +232,7 @@ func ShortenPath(path string) string {
 // RenderFriendlyHeader renders a friendly description header if present in the tool call arguments.
 // Returns the rendered header string and true if a friendly description was found, empty string and false otherwise.
 // Custom renderers can use this to show the friendly description before their custom content.
-func RenderFriendlyHeader(msg *types.Message, s spinner.Spinner) (string, bool) {
+func RenderFriendlyHeader(msg *types.Message, s spinner.Spinner, toolNameStyle lipgloss.Style) (string, bool) {
 	friendlyDesc := tools.ExtractDescription(msg.ToolCall.Function.Arguments)
 	if friendlyDesc == "" {
 		return "", false
@@ -232,6 +240,22 @@ func RenderFriendlyHeader(msg *types.Message, s spinner.Spinner) (string, bool) 
 
 	icon := Icon(msg, s)
 	content := fmt.Sprintf("%s %s", icon, styles.ToolDescription.Render(friendlyDesc))
-	content += " " + styles.ToolNameDim.Render("("+msg.ToolDefinition.DisplayName()+")")
+	content += " " + toolNameStyle.UnsetPadding().Render("("+msg.ToolDefinition.DisplayName()+")")
 	return content, true
+}
+
+func isDeniedOrRejectedToolCall(msg *types.Message) bool {
+	// We don't currently have a distinct status enum for denials/rejections in the
+	// TUI message model, so we use a conservative set of exact phrases emitted by
+	// the runtime for the user approval / permissions flows.
+	if msg == nil || msg.ToolStatus != types.ToolStatusError {
+		return false
+	}
+	c := msg.Content
+	if c == "" {
+		return false
+	}
+	return strings.Contains(c, "denied by session permissions") ||
+		strings.Contains(c, "denied by permissions configuration") ||
+		strings.HasPrefix(c, "The user rejected the tool call.")
 }

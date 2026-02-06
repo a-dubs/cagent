@@ -4,6 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/docker/cagent/pkg/tools"
+	"github.com/docker/cagent/pkg/tui/components/spinner"
+	"github.com/docker/cagent/pkg/tui/styles"
+	"github.com/docker/cagent/pkg/tui/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,6 +20,41 @@ func TestFormatToolResult_StripsANSI(t *testing.T) {
 
 	assert.NotContains(t, out, "\x1b[", "ANSI escape sequences should be stripped for display formatting")
 	assert.Equal(t, "red normal green", strings.TrimSpace(out))
+}
+
+func TestRenderTool_DeniedOrRejectedToolCallUsesStrikethroughStyle(t *testing.T) {
+	t.Parallel()
+
+	s := spinner.New(spinner.ModeSpinnerOnly, styles.SpinnerDotsAccentStyle)
+
+	baseMsg := &types.Message{
+		Type: types.MessageTypeToolCall,
+		ToolCall: tools.ToolCall{
+			ID: "call-1",
+			Function: tools.FunctionCall{
+				Name:      "shell",
+				Arguments: `{"command":"echo hi"}`,
+			},
+		},
+		ToolDefinition: tools.Tool{Name: "shell"},
+		ToolStatus:     types.ToolStatusError,
+	}
+
+	t.Run("rejected", func(t *testing.T) {
+		msg := *baseMsg
+		msg.Content = "The user rejected the tool call."
+
+		out := RenderTool(&msg, s, "echo hi", "", 80, false)
+		assert.Contains(t, out, "[9m", "expected ANSI strikethrough sequence for denied/rejected tool header")
+	})
+
+	t.Run("generic error", func(t *testing.T) {
+		msg := *baseMsg
+		msg.Content = "command failed: exit status 1"
+
+		out := RenderTool(&msg, s, "echo hi", "", 80, false)
+		assert.NotContains(t, out, "[9m", "generic tool errors should not be rendered as denied/rejected")
+	})
 }
 
 func TestTryFixPartialJSON(t *testing.T) {

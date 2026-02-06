@@ -291,6 +291,13 @@ var (
 	ToolErrorMessageStyle = BaseStyle.
 				Foreground(ErrorStrong)
 
+	// ToolDeniedStyle is used for tool calls that were denied/rejected by the
+	// user approval/permissions flow. It is display-only and does not affect
+	// approval logic.
+	ToolDeniedStyle = ToolMessageStyle.
+			Foreground(TextMuted).
+			Strikethrough(true)
+
 	ToolName = ToolMessageStyle.
 			Foreground(TextMutedGray).
 			Padding(0, 1)
@@ -298,6 +305,10 @@ var (
 	ToolNameError = ToolName.
 			Foreground(ErrorStrong).
 			Background(ErrorDark)
+
+	ToolNameDenied = ToolName.
+			Foreground(TextMuted).
+			Strikethrough(true)
 
 	ToolNameDim = ToolMessageStyle.
 			Foreground(TextMutedGray).
