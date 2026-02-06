@@ -28,6 +28,7 @@ import (
 type runExecFlags struct {
 	agentName         string
 	autoApprove       bool
+	yoloExceptWrites  bool
 	attachmentPath    string
 	remoteAddress     string
 	connectRPC        bool
@@ -80,6 +81,7 @@ func newRunCmd() *cobra.Command {
 func addRunOrExecFlags(cmd *cobra.Command, flags *runExecFlags) {
 	cmd.PersistentFlags().StringVarP(&flags.agentName, "agent", "a", "root", "Name of the agent to run")
 	cmd.PersistentFlags().BoolVar(&flags.autoApprove, "yolo", false, "Automatically approve all tool calls without prompting")
+	cmd.PersistentFlags().BoolVar(&flags.yoloExceptWrites, "yolo-except-writes", false, "Automatically approve tool calls except file modification tools")
 	cmd.PersistentFlags().BoolVar(&flags.hideToolResults, "hide-tool-results", false, "Hide tool call results")
 	cmd.PersistentFlags().StringVar(&flags.attachmentPath, "attach", "", "Attach an image file to the message")
 	cmd.PersistentFlags().StringArrayVar(&flags.modelOverrides, "model", nil, "Override agent model: [agent=]provider/model (repeatable)")
@@ -280,6 +282,7 @@ func (f *runExecFlags) createConnectRPCRuntimeAndSession(ctx context.Context, or
 
 	sessTemplate := session.New(
 		session.WithToolsApproved(f.autoApprove),
+		session.WithYoloExceptWrites(f.yoloExceptWrites),
 	)
 
 	sess, err := connectClient.CreateSession(ctx, sessTemplate)
@@ -307,6 +310,7 @@ func (f *runExecFlags) createHTTPRuntimeAndSession(ctx context.Context, original
 
 	sessTemplate := session.New(
 		session.WithToolsApproved(f.autoApprove),
+		session.WithYoloExceptWrites(f.yoloExceptWrites),
 	)
 
 	sess, err := remoteClient.CreateSession(ctx, sessTemplate)
@@ -378,6 +382,7 @@ func (f *runExecFlags) createLocalRuntimeAndSession(ctx context.Context, loadRes
 			return nil, nil, fmt.Errorf("loading session %q: %w", resolvedID, err)
 		}
 		sess.ToolsApproved = f.autoApprove
+		sess.YoloExceptWrites = f.yoloExceptWrites
 		sess.HideToolResults = f.hideToolResults
 
 		// Apply any stored model overrides from the session
@@ -396,6 +401,7 @@ func (f *runExecFlags) createLocalRuntimeAndSession(ctx context.Context, loadRes
 		sess = session.New(
 			session.WithMaxIterations(agent.MaxIterations()),
 			session.WithToolsApproved(f.autoApprove),
+			session.WithYoloExceptWrites(f.yoloExceptWrites),
 			session.WithHideToolResults(f.hideToolResults),
 			session.WithThinking(agent.ThinkingConfigured()),
 		)

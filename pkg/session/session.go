@@ -66,6 +66,14 @@ type Session struct {
 	// ToolsApproved is a flag to indicate if the tools have been approved
 	ToolsApproved bool `json:"tools_approved"`
 
+	// YoloExceptWrites is a flag to indicate that tool calls should be auto-approved
+	// except for file modification tools (e.g., write/edit). This is plumbed from
+	// the CLI flag `--yolo-except-writes`.
+	//
+	// Note: Approval behavior is not implemented yet; runtime logic will read this
+	// in a follow-up change.
+	YoloExceptWrites bool `json:"yolo_except_writes"`
+
 	// Thinking is a session-level flag to enable thinking/interleaved thinking
 	// defaults for all providers. When false, providers will not apply auto-thinking budgets
 	// or interleaved thinking, regardless of model config. This is controlled by the /think
@@ -365,6 +373,12 @@ func WithTitle(title string) Opt {
 func WithToolsApproved(toolsApproved bool) Opt {
 	return func(s *Session) {
 		s.ToolsApproved = toolsApproved
+	}
+}
+
+func WithYoloExceptWrites(yoloExceptWrites bool) Opt {
+	return func(s *Session) {
+		s.YoloExceptWrites = yoloExceptWrites
 	}
 }
 
