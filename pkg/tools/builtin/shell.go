@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -107,6 +108,12 @@ type RunShellArgs struct {
 	Timeout int    `json:"timeout,omitempty" jsonschema:"Command execution timeout in seconds (default: 30)"`
 }
 
+// ShellResultMeta is optional metadata returned from the `shell` tool.
+// This is display-only; it should not affect tool execution behavior.
+type ShellResultMeta struct {
+	ExitCode int `json:"exit_code"`
+}
+
 type RunShellBackgroundArgs struct {
 	Cmd string `json:"cmd" jsonschema:"The shell command to execute in the background"`
 	Cwd string `json:"cwd,omitempty" jsonschema:"The working directory to execute the command in (default: \".\")"`
@@ -186,7 +193,24 @@ func (h *shellHandler) runNativeCommand(timeoutCtx, ctx context.Context, command
 	}
 
 	output := formatCommandOutput(timeoutCtx, ctx, cmdErr, outBuf.String(), timeout)
-	return tools.ResultSuccess(limitOutput(output))
+	result := tools.ResultSuccess(limitOutput(output))
+
+	// Best-effort exit code reporting for display in the TUI.
+	// Avoid guessing exit codes for timeouts/cancellation.
+	if timeoutCtx.Err() == nil {
+		exitCode := 0
+		if cmdErr != nil {
+			var exitErr *exec.ExitError
+			if errors.As(cmdErr, &exitErr) {
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = -1
+			}
+		}
+		result.Meta = ShellResultMeta{ExitCode: exitCode}
+	}
+
+	return result
 }
 
 func (h *shellHandler) RunShellBackground(_ context.Context, params RunShellBackgroundArgs) (*tools.ToolCallResult, error) {

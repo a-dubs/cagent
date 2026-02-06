@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -115,7 +116,24 @@ func (s *sandboxRunner) runCommand(timeoutCtx, ctx context.Context, command, cwd
 	err = cmd.Run()
 
 	output := formatCommandOutput(timeoutCtx, ctx, err, outBuf.String(), timeout)
-	return tools.ResultSuccess(limitOutput(output))
+	result := tools.ResultSuccess(limitOutput(output))
+
+	// Best-effort exit code reporting for display in the TUI.
+	// Avoid guessing exit codes for timeouts/cancellation.
+	if timeoutCtx.Err() == nil {
+		exitCode := 0
+		if err != nil {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = -1
+			}
+		}
+		result.Meta = ShellResultMeta{ExitCode: exitCode}
+	}
+
+	return result
 }
 
 // stop stops and removes the sandbox container.
