@@ -44,6 +44,9 @@ type Model interface {
 	layout.Help
 	layout.Positionable
 
+	BeginStream(streamKey string) tea.Cmd
+	EndStream(streamKey string) tea.Cmd
+
 	AddUserMessage(content string) tea.Cmd
 	AddLoadingMessage(description string) tea.Cmd
 	ReplaceLoadingWithUser(content string) tea.Cmd
@@ -109,6 +112,8 @@ type model struct {
 
 	// Debug layout mode - highlights truncated lines with red background
 	debugLayout bool
+
+	activeStreamKey string
 }
 
 // New creates a new message list component
@@ -133,6 +138,34 @@ func newModel(width, height int, sessionState *service.SessionState) *model {
 		debugLayout:          os.Getenv("CAGENT_EXPERIMENTAL_DEBUG_LAYOUT") == "1",
 		renderDirty:          true,
 	}
+}
+
+func (m *model) BeginStream(streamKey string) tea.Cmd {
+	m.activeStreamKey = streamKey
+	return nil
+}
+
+func (m *model) EndStream(streamKey string) tea.Cmd {
+	// Only end if it matches; prevents unrelated stream stops from clobbering state.
+	if streamKey == "" || m.activeStreamKey != streamKey {
+		return nil
+	}
+	m.activeStreamKey = ""
+
+	// Mark any reasoning blocks from this stream as finalized (not streaming).
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].Type != types.MessageTypeAssistantReasoningBlock {
+			continue
+		}
+		if m.messages[i].StreamKey != streamKey {
+			continue
+		}
+		if block, ok := m.views[i].(*reasoningblock.Model); ok {
+			block.SetStreaming(false)
+			m.invalidateItem(i)
+		}
+	}
+	return nil
 }
 
 // Init initializes the component
@@ -1284,7 +1317,9 @@ func (m *model) AppendReasoning(agentName, content string) tea.Cmd {
 	lastMsg := m.messages[lastIdx]
 
 	// Append to existing reasoning block for this agent
-	if lastMsg.Type == types.MessageTypeAssistantReasoningBlock && lastMsg.Sender == agentName {
+	if lastMsg.Type == types.MessageTypeAssistantReasoningBlock &&
+		lastMsg.Sender == agentName &&
+		(m.activeStreamKey == "" || lastMsg.StreamKey == m.activeStreamKey) {
 		if block, ok := m.views[lastIdx].(*reasoningblock.Model); ok {
 			block.AppendReasoning(content)
 			lastMsg.Content += content // Keep content in sync for copying
@@ -1306,9 +1341,13 @@ func (m *model) addReasoningBlock(agentName, content string) tea.Cmd {
 		Type:    types.MessageTypeAssistantReasoningBlock,
 		Sender:  agentName,
 		Content: content,
+		// If we know the active stream, stamp the message so future appends can't
+		// accidentally cross stream boundaries.
+		StreamKey: m.activeStreamKey,
 	}
 
 	block := reasoningblock.New(nextBlockID(), agentName, m.sessionState)
+	block.SetStreaming(m.activeStreamKey != "")
 	block.SetReasoning(content)
 	block.SetSize(m.contentWidth(), 0)
 

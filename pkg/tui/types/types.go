@@ -39,6 +39,7 @@ type Message struct {
 	Type           MessageType
 	Content        string
 	Sender         string                // Agent name for assistant messages
+	StreamKey      string                // Unique key for the active runtime stream (for grouping streaming content)
 	ToolCall       tools.ToolCall        // Associated tool call for tool messages
 	ToolDefinition tools.Tool            // Definition of the tool being called
 	ToolStatus     ToolStatus            // Status for tool calls

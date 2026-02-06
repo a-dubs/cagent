@@ -103,6 +103,7 @@ type Model struct {
 	contentItems        []contentItem // Ordered sequence of reasoning and tool calls
 	toolEntries         []toolEntry   // All tool entries (referenced by contentItems)
 	expanded            bool
+	streaming           bool // true while a runtime stream is actively updating this block
 	width               int
 	height              int
 	sessionState        *service.SessionState
@@ -130,6 +131,16 @@ func (m *Model) ID() string {
 // AgentName returns the agent name for this block.
 func (m *Model) AgentName() string {
 	return m.agentName
+}
+
+// SetStreaming marks whether the block is currently receiving streaming updates.
+func (m *Model) SetStreaming(streaming bool) {
+	m.streaming = streaming
+}
+
+// IsStreaming returns whether the block is currently receiving streaming updates.
+func (m *Model) IsStreaming() bool {
+	return m.streaming
 }
 
 // SetReasoning sets reasoning content (replaces all content items with a single reasoning item).
@@ -601,7 +612,11 @@ func (m *Model) hasExtraContent() bool {
 
 // renderHeader renders the header line with toggle affordance.
 func (m *Model) renderHeader(expanded bool) string {
-	badge := styles.ThinkingBadgeStyle.Render("Thinking")
+	label := "Thinking"
+	if m.streaming {
+		label = "Thinking…"
+	}
+	badge := styles.ThinkingBadgeStyle.Render(label)
 
 	// Use [+] to expand and [-] to collapse
 	var indicator string

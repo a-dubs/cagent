@@ -68,6 +68,25 @@ func TestReasoningBlockCollapsedWithLongContent(t *testing.T) {
 	assert.Contains(t, stripped, "Thinking [+]")
 }
 
+func TestReasoningBlockCollapsedPreviewShowsNewestLines(t *testing.T) {
+	t.Parallel()
+
+	sessionState := &service.SessionState{}
+	block := New("test-1", "root", sessionState)
+	block.SetSize(80, 24)
+
+	// Ensure we have enough lines to exceed previewLines.
+	// Use markdown list to ensure the renderer preserves line breaks.
+	block.SetReasoning("1. oldest-1\n2. oldest-2\n3. oldest-3\n4. newest-1\n5. newest-2\n6. newest-3")
+
+	view := ansi.Strip(block.View())
+
+	// Collapsed preview should show the newest lines, not the oldest.
+	assert.Contains(t, view, "newest-1")
+	assert.Contains(t, view, "newest-3")
+	assert.NotContains(t, view, "oldest-1")
+}
+
 func TestReasoningBlockExpanded(t *testing.T) {
 	t.Parallel()
 

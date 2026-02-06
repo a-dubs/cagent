@@ -169,6 +169,10 @@ type chatPage struct {
 	// Uses spinner-only mode and is paired with a subtle label.
 	pendingSpinner spinner.Spinner
 
+	// streamSeq increments on each StreamStarted event to disambiguate turns.
+	streamSeq uint64
+	activeStreamKey string
+
 	// Message queue for enqueuing messages while agent is working
 	messageQueue []queuedMessage
 

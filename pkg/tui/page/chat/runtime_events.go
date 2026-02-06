@@ -184,6 +184,11 @@ func (p *chatPage) handleStreamStarted(msg *runtime.StreamStartedEvent) tea.Cmd 
 	p.streamCancelled = false
 	p.hasReceivedAssistantContent = false
 	p.awaitingFirstOutput = true
+
+	p.streamSeq++
+	p.activeStreamKey = fmt.Sprintf("%s/%d", msg.SessionID, p.streamSeq)
+	p.messages.BeginStream(p.activeStreamKey)
+
 	// Hide immediately; we'll show after debounce if there's still no output.
 	hidePendingCmd := p.setPendingResponse(false)
 	debounceCmd := p.startPendingResponseDebounce()
@@ -219,6 +224,10 @@ func (p *chatPage) handleStreamStopped(msg *runtime.StreamStoppedEvent) tea.Cmd 
 		"session_id", msg.SessionID,
 		"should_exit", p.app.ShouldExitAfterFirstResponse(),
 		"has_content", p.hasReceivedAssistantContent)
+
+	p.messages.EndStream(p.activeStreamKey)
+	p.activeStreamKey = ""
+
 	spinnerCmd := p.setWorking(false)
 	p.awaitingFirstOutput = false
 	p.pendingResponseSeq++

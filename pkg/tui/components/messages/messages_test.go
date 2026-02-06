@@ -85,6 +85,35 @@ func TestLoadFromSessionIncludesReasoningContent(t *testing.T) {
 	assert.Equal(t, "root", m.messages[2].Sender)
 }
 
+func TestAppendReasoningSeparatesBlocksByStream(t *testing.T) {
+	t.Parallel()
+
+	sessionState := &service.SessionState{}
+	m := NewScrollableView(80, 24, sessionState).(*model)
+	m.SetSize(80, 24)
+
+	// Stream 1
+	m.BeginStream("stream-1")
+	m.AppendReasoning("root", "reasoning-1")
+	m.EndStream("stream-1")
+
+	// Stream 2
+	m.BeginStream("stream-2")
+	m.AppendReasoning("root", "reasoning-2")
+	m.EndStream("stream-2")
+
+	// Should have two distinct reasoning blocks, not one appended forever.
+	require.Len(t, m.messages, 2)
+	require.Equal(t, types.MessageTypeAssistantReasoningBlock, m.messages[0].Type)
+	require.Equal(t, types.MessageTypeAssistantReasoningBlock, m.messages[1].Type)
+
+	assert.Equal(t, "reasoning-1", m.messages[0].Content)
+	assert.Equal(t, "reasoning-2", m.messages[1].Content)
+
+	assert.Equal(t, "stream-1", m.messages[0].StreamKey)
+	assert.Equal(t, "stream-2", m.messages[1].StreamKey)
+}
+
 func TestLoadFromSessionReasoningOrderWithToolCalls(t *testing.T) {
 	t.Parallel()
 
