@@ -17,6 +17,9 @@ type (
 	// ShowCostDialogMsg shows the cost/usage dialog.
 	ShowCostDialogMsg struct{}
 
+	// ShowUsageDialogMsg shows the token usage dialog (/usage).
+	ShowUsageDialogMsg struct{}
+
 	// ShowPermissionsDialogMsg shows the permissions dialog.
 	ShowPermissionsDialogMsg struct{}
 )

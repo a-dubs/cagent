@@ -90,6 +90,11 @@ type Session struct {
 
 	InputTokens  int64   `json:"input_tokens"`
 	OutputTokens int64   `json:"output_tokens"`
+	// ContextLength and ContextLimit reflect the latest model call's context usage
+	// when provided by the runtime (TokenUsageEvent). These are used for the /usage
+	// dialog and sidebar context indicators.
+	ContextLength int64 `json:"context_length,omitempty"`
+	ContextLimit  int64 `json:"context_limit,omitempty"`
 	Cost         float64 `json:"cost"`
 
 	// Permissions holds session-level permission overrides.

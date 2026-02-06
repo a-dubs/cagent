@@ -80,6 +80,15 @@ func TestParseSlashCommand_OtherCommands(t *testing.T) {
 		assert.True(t, ok)
 	})
 
+	t.Run("usage command", func(t *testing.T) {
+		t.Parallel()
+		cmd := ParseSlashCommand("/usage")
+		require.NotNil(t, cmd)
+		msg := cmd()
+		_, ok := msg.(messages.ShowUsageDialogMsg)
+		assert.True(t, ok)
+	})
+
 	t.Run("unknown command returns nil", func(t *testing.T) {
 		t.Parallel()
 		cmd := ParseSlashCommand("/unknown")

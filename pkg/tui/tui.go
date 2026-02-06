@@ -410,6 +410,9 @@ func (a *appModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.ShowCostDialogMsg:
 		return a.handleShowCostDialog()
 
+	case messages.ShowUsageDialogMsg:
+		return a.handleShowUsageDialog()
+
 	case messages.ShowPermissionsDialogMsg:
 		return a.handleShowPermissionsDialog()
 

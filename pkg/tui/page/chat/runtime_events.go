@@ -154,6 +154,8 @@ func (p *chatPage) handleTokenUsage(msg *runtime.TokenUsageEvent) {
 			// Update session-level "latest call" usage (used for context/compaction indicators).
 			sess.InputTokens = msg.Usage.InputTokens
 			sess.OutputTokens = msg.Usage.OutputTokens
+			sess.ContextLength = msg.Usage.ContextLength
+			sess.ContextLimit = msg.Usage.ContextLimit
 			sess.Cost = msg.Usage.Cost
 
 			// Track per-message usage for /cost dialog

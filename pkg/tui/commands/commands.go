@@ -193,6 +193,16 @@ func builtInSessionCommands() []Item {
 			},
 		},
 		{
+			ID:           "session.usage",
+			Label:        "Usage",
+			SlashCommand: "/usage",
+			Description:  "Show token usage details (latest context + session totals)",
+			Category:     "Session",
+			Execute: func(string) tea.Cmd {
+				return core.CmdHandler(messages.ShowUsageDialogMsg{})
+			},
+		},
+		{
 			ID:           "session.permissions",
 			Label:        "Permissions",
 			SlashCommand: "/permissions",

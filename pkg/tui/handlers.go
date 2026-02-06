@@ -318,6 +318,14 @@ func (a *appModel) handleShowCostDialog() (tea.Model, tea.Cmd) {
 	})
 }
 
+// Usage
+func (a *appModel) handleShowUsageDialog() (tea.Model, tea.Cmd) {
+	sess := a.application.Session()
+	return a, core.CmdHandler(dialog.OpenDialogMsg{
+		Model: dialog.NewUsageDialog(sess),
+	})
+}
+
 // Permissions
 
 func (a *appModel) handleShowPermissionsDialog() (tea.Model, tea.Cmd) {
