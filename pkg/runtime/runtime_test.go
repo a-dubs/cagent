@@ -679,6 +679,44 @@ func (m mockModelStoreWithLimit) GetModel(context.Context, string) (*modelsdev.M
 	return &modelsdev.Model{Limit: modelsdev.Limit{Context: m.limit}, Cost: &modelsdev.Cost{}}, nil
 }
 
+func TestTokenUsageAccumulatesAcrossTurns(t *testing.T) {
+	// Regression test: session token totals must accumulate across turns,
+	// rather than being overwritten by the latest stream's usage.
+	firstStream := newStreamBuilder().
+		AddContent("first").
+		AddStopWithUsage(3, 2).
+		Build()
+
+	secondStream := newStreamBuilder().
+		AddContent("second").
+		AddStopWithUsage(5, 7).
+		Build()
+
+	prov := &queueProvider{id: "test/mock-model", streams: []chat.MessageStream{firstStream, secondStream}}
+	root := agent.New("root", "You are a test agent", agent.WithModel(prov))
+	tm := team.New(team.WithAgents(root))
+
+	rt, err := NewLocalRuntime(tm, WithSessionCompaction(false), WithModelStore(mockModelStore{}))
+	require.NoError(t, err)
+
+	sess := session.New(session.WithUserMessage("turn 1"))
+	sess.Title = "Unit Test"
+
+	// First turn
+	for range rt.RunStream(t.Context(), sess) {
+	}
+	require.EqualValues(t, 3, sess.InputTokens)
+	require.EqualValues(t, 2, sess.OutputTokens)
+
+	// Second turn (same session)
+	sess.AddMessage(session.UserMessage("turn 2"))
+	for range rt.RunStream(t.Context(), sess) {
+	}
+
+	require.EqualValues(t, 8, sess.InputTokens, "input tokens should accumulate across turns")
+	require.EqualValues(t, 9, sess.OutputTokens, "output tokens should accumulate across turns")
+}
+
 func TestCompaction(t *testing.T) {
 	// First stream: assistant issues a tool call and usage exceeds 90% threshold
 	mainStream := newStreamBuilder().
