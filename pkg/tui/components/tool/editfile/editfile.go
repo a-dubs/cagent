@@ -88,12 +88,13 @@ func render(
 		// Calculate available width for diff rendering, accounting for
 		// ToolCallResult frame padding.
 		contentWidth := width - styles.ToolCallResult.GetHorizontalFrameSize()
+		splitView := chooseSplitDiffView(sessionState, contentWidth)
 
 		content += "\n" + styles.ToolCallResult.Render(
 			renderEditFile(
 				msg.ToolCall,
 				contentWidth,
-				sessionState.SplitDiffView(),
+				splitView,
 				msg.ToolStatus,
 			),
 		)

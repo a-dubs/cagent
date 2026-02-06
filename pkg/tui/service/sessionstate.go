@@ -11,6 +11,7 @@ import (
 // rather than the full SessionState, following the principle of least privilege.
 type SessionStateReader interface {
 	SplitDiffView() bool
+	HasExplicitDiffPreference() bool
 	YoloMode() bool
 	Thinking() bool
 	HideToolResults() bool
@@ -28,11 +29,12 @@ var _ SessionStateReader = (*SessionState)(nil)
 // This provides a centralized location for state that needs to be
 // accessible by multiple components.
 type SessionState struct {
-	splitDiffView   bool
-	yoloMode        bool
-	thinking        bool
-	hideToolResults bool
-	sessionTitle    string
+	splitDiffView          bool
+	explicitDiffPreference bool
+	yoloMode               bool
+	thinking               bool
+	hideToolResults        bool
+	sessionTitle           string
 
 	previousMessage  *types.Message
 	currentAgentName string
@@ -41,11 +43,12 @@ type SessionState struct {
 
 func NewSessionState(s *session.Session) *SessionState {
 	return &SessionState{
-		splitDiffView:   true,
-		yoloMode:        s.ToolsApproved,
-		thinking:        s.Thinking,
-		hideToolResults: s.HideToolResults,
-		sessionTitle:    s.Title,
+		splitDiffView:          true,
+		explicitDiffPreference: false,
+		yoloMode:               s.ToolsApproved,
+		thinking:               s.Thinking,
+		hideToolResults:        s.HideToolResults,
+		sessionTitle:           s.Title,
 	}
 }
 
@@ -53,8 +56,13 @@ func (s *SessionState) SplitDiffView() bool {
 	return s.splitDiffView
 }
 
+func (s *SessionState) HasExplicitDiffPreference() bool {
+	return s.explicitDiffPreference
+}
+
 func (s *SessionState) ToggleSplitDiffView() {
 	s.splitDiffView = !s.splitDiffView
+	s.explicitDiffPreference = true
 }
 
 func (s *SessionState) YoloMode() bool {
