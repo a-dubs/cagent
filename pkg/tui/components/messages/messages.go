@@ -426,6 +426,26 @@ func (m *model) handleMouseWheel(msg tea.MouseWheelMsg) (layout.Model, tea.Cmd) 
 }
 
 func (m *model) handleKeyPress(msg tea.KeyPressMsg) (layout.Model, tea.Cmd) {
+	// Keyboard selection: Shift+Arrow extends selection.
+	// This is intentionally handled before other navigation so Shift+Up/Down
+	// doesn't interfere with message selection / scrolling.
+	if msg.Mod == tea.ModShift {
+		switch msg.Code {
+		case tea.KeyUp, tea.KeyDown, tea.KeyLeft, tea.KeyRight:
+			m.extendSelectionWithShiftArrow(msg.Code)
+			return m, nil
+		}
+	}
+
+	// Explicit copy shortcut: Cmd+C (macOS) / Ctrl+C (others) copies current selection.
+	// If there's no active selection, preserve existing Ctrl+C behavior (quit/interrupt) by not consuming it here.
+	if (msg.Code == 'c' || msg.Code == 'C') && (msg.Mod == tea.ModCtrl || msg.Mod == tea.ModMeta) {
+		if m.selection.active {
+			return m, m.copySelectionToClipboard(clipboardCopySourceSelection)
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "esc":
 		m.clearSelection()

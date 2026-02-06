@@ -1,6 +1,7 @@
 package messages
 
 import (
+	"unicode"
 	"strings"
 	"time"
 
@@ -32,6 +33,12 @@ type selectionState struct {
 
 	// Debounced copy: incremented on each click, copy only fires if ID matches
 	pendingCopyID int
+}
+
+// hasCaret returns true when there's enough state to move selection via keyboard.
+// Today we use the selection endpoints as the caret.
+func (s *selectionState) hasCaret() bool {
+	return s.active
 }
 
 // start initializes a new selection at the given position
@@ -281,4 +288,93 @@ func (m *model) highlightLine(line string, startCol, endCol int) string {
 // clearSelection resets the selection state
 func (m *model) clearSelection() {
 	m.selection.clear()
+}
+
+// extendSelectionWithShiftArrow updates the selection endpoints based on Shift+Arrow.
+//
+// - Shift+Up/Down extends by line (tries to preserve the current column).
+// - Shift+Left/Right extends by character (crosses lines when hitting edges).
+//
+// This reuses the existing selection model (start/end line+col) so highlighting and
+// copy extraction continue to work.
+func (m *model) extendSelectionWithShiftArrow(code rune) {
+	m.ensureAllItemsRendered()
+	if len(m.renderedLines) == 0 {
+		return
+	}
+
+	keyboardTextStartCol := func(renderedLine string) int {
+		plain := ansi.Strip(renderedLine)
+		col := 0
+		for _, r := range plain {
+			// Skip border decorations and leading whitespace so keyboard selection
+			// starts on real text content (matching mouse selection/copy behavior).
+			if boxDrawingChars[r] || unicode.IsSpace(r) {
+				col += runewidth.RuneWidth(r)
+				continue
+			}
+			break
+		}
+		return col
+	}
+
+	// Initialize a caret if no selection is active. We pick a stable, local default:
+	// the top visible line (scrollOffset) and the first text column on that line.
+	if !m.selection.active {
+		line := max(0, min(m.scrollOffset, len(m.renderedLines)-1))
+		col := keyboardTextStartCol(m.renderedLines[line])
+		m.selection.active = true
+		m.selection.mouseButtonDown = false
+		m.selection.startLine = line
+		m.selection.startCol = col
+		m.selection.endLine = line
+		m.selection.endCol = col
+	}
+
+	// Current caret is the selection end.
+	line := m.selection.endLine
+	col := m.selection.endCol
+
+	line = max(0, min(line, len(m.renderedLines)-1))
+	col = max(0, col)
+
+	getLineWidth := func(absoluteLine int) int {
+		if absoluteLine < 0 || absoluteLine >= len(m.renderedLines) {
+			return 0
+		}
+		return runewidth.StringWidth(ansi.Strip(m.renderedLines[absoluteLine]))
+	}
+
+	switch code {
+	case tea.KeyUp:
+		if line > 0 {
+			line--
+			col = min(col, getLineWidth(line))
+		}
+	case tea.KeyDown:
+		if line < len(m.renderedLines)-1 {
+			line++
+			col = min(col, getLineWidth(line))
+		}
+	case tea.KeyLeft:
+		if col > 0 {
+			col--
+		} else if line > 0 {
+			line--
+			col = getLineWidth(line)
+		}
+	case tea.KeyRight:
+		w := getLineWidth(line)
+		if col < w {
+			col++
+		} else if line < len(m.renderedLines)-1 {
+			line++
+			col = 0
+		}
+	default:
+		return
+	}
+
+	m.selection.endLine = line
+	m.selection.endCol = col
 }
