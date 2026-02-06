@@ -1,9 +1,11 @@
 package dialog
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -206,4 +208,19 @@ func TestCommandPaletteLineMappingWithFiltering(t *testing.T) {
 	assert.Equal(t, 1, d.findSelectedLine())
 	d.selected = 1
 	assert.Equal(t, 2, d.findSelectedLine())
+}
+
+func TestCommandPaletteViewIncludesSelectionCopyTip(t *testing.T) {
+	t.Parallel()
+
+	dialog := NewCommandPaletteDialog(categories)
+	d := dialog.(*commandPaletteDialog)
+
+	// Give the dialog a deterministic size so View() has stable layout.
+	_ = d.SetSize(120, 40)
+
+	view := ansi.Strip(d.View())
+	require.True(t,
+		strings.Contains(view, "Tip: drag to select text to copy (double-click word, triple-click line)"),
+		"expected command palette view to include selection/copy tip, got:\n%s", view)
 }

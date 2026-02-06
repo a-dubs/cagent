@@ -296,7 +296,7 @@ const (
 	paletteHeightPercent   = 70
 	paletteMaxHeight       = 30
 	paletteDialogPadding   = 6 // horizontal padding inside dialog border
-	paletteListOverhead    = 8 // title(1) + space(1) + input(1) + separator(1) + space(1) + help(1) + borders(2)
+	paletteListOverhead    = 9 // title(1) + space(1) + input(1) + separator(1) + space(1) + help keys(1) + tip(1) + borders(2)
 	paletteListStartY      = 6 // border(1) + padding(1) + title(1) + space(1) + input(1) + separator(1)
 	paletteScrollbarXInset = 3
 	paletteScrollbarGap    = 1
@@ -479,6 +479,7 @@ func (d *commandPaletteDialog) View() string {
 		AddContent(scrollableContent).
 		AddSpace().
 		AddHelpKeys("↑/↓", "navigate", "enter", "execute", "esc", "close").
+		AddHelp("Tip: drag to select text to copy (double-click word, triple-click line)").
 		Build()
 
 	return styles.DialogStyle.Width(dialogWidth).Render(content)
