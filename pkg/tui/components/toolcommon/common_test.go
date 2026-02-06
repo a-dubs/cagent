@@ -75,6 +75,33 @@ func TestFormatToolResultExpandable_NoOverflow_NoHint(t *testing.T) {
 	assert.NotContains(t, out, "click to collapse")
 }
 
+func TestToolGlyph(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		toolName string
+		want     string
+	}{
+		{name: "shell", toolName: "shell", want: "$"},
+		{name: "read_file", toolName: "read_file", want: "≡"},
+		{name: "read_multiple_files", toolName: "read_multiple_files", want: "≡"},
+		{name: "edit_file", toolName: "edit_file", want: "✎"},
+		{name: "write_file", toolName: "write_file", want: "✎"},
+		{name: "list_directory", toolName: "list_directory", want: "d"},
+		{name: "directory_tree", toolName: "directory_tree", want: "d"},
+		{name: "unknown", toolName: "definitely_not_a_tool", want: ""},
+		{name: "empty", toolName: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ToolGlyph(tt.toolName))
+		})
+	}
+}
+
 func TestRenderTool_DeniedOrRejectedToolCallUsesStrikethroughStyle(t *testing.T) {
 	t.Parallel()
 

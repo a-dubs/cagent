@@ -121,6 +121,36 @@ func Icon(msg *types.Message, inProgress spinner.Spinner) string {
 	}
 }
 
+// ToolGlyph returns a compact glyph representing a tool name.
+// Keep glyphs simple and terminal-friendly; avoid requiring Nerd Fonts.
+// Unknown tools return an empty string.
+func ToolGlyph(toolName string) string {
+	switch toolName {
+	case builtin.ToolNameShell:
+		return "$"
+	case builtin.ToolNameReadFile, builtin.ToolNameReadMultipleFiles:
+		// "≡" reads well in most terminals and is visually distinct.
+		return "≡"
+	case builtin.ToolNameEditFile, builtin.ToolNameWriteFile:
+		return "✎"
+	case builtin.ToolNameListDirectory, builtin.ToolNameDirectoryTree:
+		// Prefer ASCII-safe glyphs for directory-ish tools.
+		return "d"
+	default:
+		return ""
+	}
+}
+
+func iconWithToolGlyph(msg *types.Message, inProgress spinner.Spinner) string {
+	icon := Icon(msg, inProgress)
+	g := ToolGlyph(msg.ToolCall.Function.Name)
+	if g == "" {
+		return icon
+	}
+	// Render glyph in the same muted tone as the tool header.
+	return icon + styles.ToolMessageStyle.Render(" "+g)
+}
+
 func FormatToolResult(content string, width int) string {
 	out, _ := FormatToolResultExpandable(content, width, false)
 	return out
@@ -190,7 +220,7 @@ func RenderTool(msg *types.Message, inProgress spinner.Spinner, args, result str
 		strings.TrimSpace(msg.Content) != "" &&
 		!hideToolResults {
 		// Reuse the existing completion-style rendering, but keep the running icon/spinner.
-		icon := Icon(msg, inProgress)
+		icon := iconWithToolGlyph(msg, inProgress)
 		name := nameStyle.Render(msg.ToolDefinition.DisplayName())
 		content := fmt.Sprintf("%s%s", icon, name)
 		if args != "" {
@@ -207,7 +237,7 @@ func RenderTool(msg *types.Message, inProgress spinner.Spinner, args, result str
 		return renderInlineToolHeader(msg, inProgress, nameStyle, args, width)
 	}
 
-	icon := Icon(msg, inProgress)
+	icon := iconWithToolGlyph(msg, inProgress)
 	name := nameStyle.Render(msg.ToolDefinition.DisplayName())
 
 	if header, ok := RenderFriendlyHeader(msg, inProgress, nameStyle); ok {
@@ -278,7 +308,7 @@ func renderInlineToolHeader(
 	cleanArgs = strings.ReplaceAll(cleanArgs, "\r", " ")
 	cleanArgs = strings.TrimSpace(cleanArgs)
 
-	icon := Icon(msg, inProgress)
+	icon := iconWithToolGlyph(msg, inProgress)
 
 	// Prefer the agent-provided friendly description when present.
 	friendlyDesc := tools.ExtractDescription(msg.ToolCall.Function.Arguments)
@@ -339,7 +369,7 @@ func RenderFriendlyHeader(msg *types.Message, s spinner.Spinner, toolNameStyle l
 		return "", false
 	}
 
-	icon := Icon(msg, s)
+	icon := iconWithToolGlyph(msg, s)
 	content := fmt.Sprintf("%s %s", icon, styles.ToolDescription.Render(friendlyDesc))
 	content += " " + toolNameStyle.UnsetPadding().Render("("+msg.ToolDefinition.DisplayName()+")")
 	return content, true
