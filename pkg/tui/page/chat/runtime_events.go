@@ -74,7 +74,9 @@ func (p *chatPage) handleRuntimeEvent(msg tea.Msg) (bool, tea.Cmd) {
 		return true, p.handleAgentChoiceReasoning(msg)
 
 	case *runtime.ShellOutputEvent:
-		return true, p.messages.AddShellOutputMessage(msg.Output)
+		clearPendingCmd := p.markFirstOutputArrived()
+		outputCmd := p.messages.AddShellOutputMessage(msg.Output)
+		return true, tea.Batch(clearPendingCmd, outputCmd)
 
 	// ===== Tool Events =====
 	case *runtime.PartialToolCallEvent:
@@ -174,11 +176,15 @@ func (p *chatPage) handleTokenUsage(msg *runtime.TokenUsageEvent) {
 func (p *chatPage) handleStreamStarted(msg *runtime.StreamStartedEvent) tea.Cmd {
 	slog.Debug("handleStreamStarted called", "agent", msg.AgentName, "session_id", msg.SessionID)
 	p.streamCancelled = false
+	p.hasReceivedAssistantContent = false
+	p.awaitingFirstOutput = true
+	// Hide immediately; we'll show after debounce if there's still no output.
+	hidePendingCmd := p.setPendingResponse(false)
+	debounceCmd := p.startPendingResponseDebounce()
 	spinnerCmd := p.setWorking(true)
-	pendingCmd := p.setPendingResponse(true)
 	p.startProgressBar()
 	sidebarCmd := p.forwardToSidebar(msg)
-	return tea.Batch(pendingCmd, spinnerCmd, sidebarCmd)
+	return tea.Batch(hidePendingCmd, debounceCmd, spinnerCmd, sidebarCmd)
 }
 
 func (p *chatPage) handleAgentChoice(msg *runtime.AgentChoiceEvent) tea.Cmd {
@@ -187,17 +193,18 @@ func (p *chatPage) handleAgentChoice(msg *runtime.AgentChoiceEvent) tea.Cmd {
 	}
 	// Track that we've received assistant content
 	p.hasReceivedAssistantContent = true
-	// Clear pending response indicator - first chunk has arrived
-	p.setPendingResponse(false)
-	return p.messages.AppendToLastMessage(msg.AgentName, msg.Content)
+	clearPendingCmd := p.markFirstOutputArrived()
+	appendCmd := p.messages.AppendToLastMessage(msg.AgentName, msg.Content)
+	return tea.Batch(clearPendingCmd, appendCmd)
 }
 
 func (p *chatPage) handleAgentChoiceReasoning(msg *runtime.AgentChoiceReasoningEvent) tea.Cmd {
 	if p.streamCancelled {
 		return nil
 	}
-	p.setPendingResponse(false)
-	return p.messages.AppendReasoning(msg.AgentName, msg.Content)
+	clearPendingCmd := p.markFirstOutputArrived()
+	appendCmd := p.messages.AppendReasoning(msg.AgentName, msg.Content)
+	return tea.Batch(clearPendingCmd, appendCmd)
 }
 
 func (p *chatPage) handleStreamStopped(msg *runtime.StreamStoppedEvent) tea.Cmd {
@@ -207,6 +214,8 @@ func (p *chatPage) handleStreamStopped(msg *runtime.StreamStoppedEvent) tea.Cmd 
 		"should_exit", p.app.ShouldExitAfterFirstResponse(),
 		"has_content", p.hasReceivedAssistantContent)
 	spinnerCmd := p.setWorking(false)
+	p.awaitingFirstOutput = false
+	p.pendingResponseSeq++
 	p.setPendingResponse(false)
 	if p.msgCancel != nil {
 		p.msgCancel = nil
@@ -235,26 +244,27 @@ func (p *chatPage) handleStreamStopped(msg *runtime.StreamStoppedEvent) tea.Cmd 
 // tool call as it streams in. The tool call appears with its name and a static
 // "pending" indicator (not animated) to show it's receiving data.
 func (p *chatPage) handlePartialToolCall(msg *runtime.PartialToolCallEvent) tea.Cmd {
-	p.setPendingResponse(false)
+	clearPendingCmd := p.markFirstOutputArrived()
 	toolCmd := p.messages.AddOrUpdateToolCall(msg.AgentName, msg.ToolCall, msg.ToolDefinition, types.ToolStatusPending)
-	return tea.Batch(toolCmd, p.messages.ScrollToBottom())
+	return tea.Batch(clearPendingCmd, toolCmd, p.messages.ScrollToBottom())
 }
 
 func (p *chatPage) handleToolCallConfirmation(msg *runtime.ToolCallConfirmationEvent) tea.Cmd {
+	clearPendingCmd := p.markFirstOutputArrived()
 	spinnerCmd := p.setWorking(false)
 	toolCmd := p.messages.AddOrUpdateToolCall(msg.AgentName, msg.ToolCall, msg.ToolDefinition, types.ToolStatusConfirmation)
 	dialogCmd := core.CmdHandler(dialog.OpenDialogMsg{
 		Model: dialog.NewToolConfirmationDialog(msg, p.sessionState),
 	})
-	return tea.Batch(toolCmd, p.messages.ScrollToBottom(), spinnerCmd, dialogCmd)
+	return tea.Batch(clearPendingCmd, toolCmd, p.messages.ScrollToBottom(), spinnerCmd, dialogCmd)
 }
 
 func (p *chatPage) handleToolCall(msg *runtime.ToolCallEvent) tea.Cmd {
-	p.setPendingResponse(false)
+	clearPendingCmd := p.markFirstOutputArrived()
 	spinnerCmd := p.setWorking(true)
 	sidebarCmd := p.forwardToSidebar(msg)
 	toolCmd := p.messages.AddOrUpdateToolCall(msg.AgentName, msg.ToolCall, msg.ToolDefinition, types.ToolStatusRunning)
-	return tea.Batch(toolCmd, p.messages.ScrollToBottom(), spinnerCmd, sidebarCmd)
+	return tea.Batch(clearPendingCmd, toolCmd, p.messages.ScrollToBottom(), spinnerCmd, sidebarCmd)
 }
 
 func (p *chatPage) handleToolCallResponse(msg *runtime.ToolCallResponseEvent) tea.Cmd {

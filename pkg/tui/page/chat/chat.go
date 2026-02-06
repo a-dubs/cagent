@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -157,8 +158,15 @@ type chatPage struct {
 	// When true, a spinner is rendered below the messages (outside the message list)
 	// to avoid list-wide invalidation on each tick.
 	pendingResponse bool
+	// awaitingFirstOutput is true while a runtime stream is active but we haven't
+	// received any assistant output nor started rendering a tool call yet.
+	// This is used to gate the debounced pending response indicator.
+	awaitingFirstOutput bool
+	// pendingResponseSeq increments whenever the "awaiting first output" phase changes.
+	// Debounce ticks carry a seq; stale ticks are ignored to avoid flashing.
+	pendingResponseSeq int64
 	// pendingSpinner is a dedicated spinner for the pending response indicator.
-	// Uses ModeBoth with funny phrases to match the original message spinner style.
+	// Uses spinner-only mode and is paired with a subtle label.
 	pendingSpinner spinner.Spinner
 
 	// Message queue for enqueuing messages while agent is working
@@ -359,7 +367,7 @@ func New(a *app.App, sessionState *service.SessionState) Page {
 		messages:                      messages.New(sessionState),
 		editor:                        editor.New(a, historyStore),
 		spinner:                       spinner.New(spinner.ModeSpinnerOnly, styles.SpinnerDotsHighlightStyle),
-		pendingSpinner:                spinner.New(spinner.ModeBoth, styles.SpinnerDotsAccentStyle),
+		pendingSpinner:                spinner.New(spinner.ModeSpinnerOnly, styles.SpinnerDotsAccentStyle),
 		focusedPanel:                  PanelEditor,
 		app:                           a,
 		keyMap:                        defaultKeyMap(),
@@ -393,6 +401,12 @@ func (p *chatPage) Init() tea.Cmd {
 	}
 
 	return tea.Batch(cmds...)
+}
+
+// pendingResponseDebounceMsg is emitted after a small delay once a stream starts,
+// and is used to avoid flashing the pending indicator when the model responds quickly.
+type pendingResponseDebounceMsg struct {
+	seq int64
 }
 
 // Update handles messages and updates the page state
@@ -513,13 +527,21 @@ func (p *chatPage) Update(msg tea.Msg) (layout.Model, tea.Cmd) {
 
 		if p.pendingResponse {
 			p.pendingSpinner.Stop()
-			p.pendingSpinner = spinner.New(spinner.ModeBoth, styles.SpinnerDotsAccentStyle)
+			p.pendingSpinner = spinner.New(spinner.ModeSpinnerOnly, styles.SpinnerDotsAccentStyle)
 			cmds = append(cmds, p.pendingSpinner.Init())
 		} else {
-			p.pendingSpinner = spinner.New(spinner.ModeBoth, styles.SpinnerDotsAccentStyle)
+			p.pendingSpinner = spinner.New(spinner.ModeSpinnerOnly, styles.SpinnerDotsAccentStyle)
 		}
 
 		return p, tea.Batch(cmds...)
+
+	case pendingResponseDebounceMsg:
+		// Only show the pending response indicator if we're still awaiting the first output
+		// for the current stream.
+		if msg.seq == p.pendingResponseSeq && p.awaitingFirstOutput && p.working && !p.streamCancelled {
+			return p, p.setPendingResponse(true)
+		}
+		return p, nil
 
 	default:
 		// Try to handle as a runtime event
@@ -602,6 +624,26 @@ func (p *chatPage) setPendingResponse(pending bool) tea.Cmd {
 // pendingSpinnerHeight is the space taken by the pending spinner (2 newlines + 1 line)
 const pendingSpinnerHeight = 3
 
+func (p *chatPage) startPendingResponseDebounce() tea.Cmd {
+	p.pendingResponseSeq++
+	seq := p.pendingResponseSeq
+
+	// Debounce to avoid flashing when the model responds quickly.
+	return tea.Tick(300*time.Millisecond, func(time.Time) tea.Msg {
+		return pendingResponseDebounceMsg{seq: seq}
+	})
+}
+
+func (p *chatPage) markFirstOutputArrived() tea.Cmd {
+	if !p.awaitingFirstOutput {
+		return nil
+	}
+	p.awaitingFirstOutput = false
+	// Invalidate any pending debounce tick and hide indicator if visible.
+	p.pendingResponseSeq++
+	return p.setPendingResponse(false)
+}
+
 // renderCollapsedSidebar renders the sidebar in collapsed mode (at top of screen).
 func (p *chatPage) renderCollapsedSidebar(sl sidebarLayout) string {
 	// Guard against unset/invalid layout (can happen before WindowSizeMsg is received).
@@ -644,7 +686,7 @@ func (p *chatPage) View() string {
 	// Build messages view with optional pending response spinner
 	messagesView := p.messages.View()
 	if p.pendingResponse {
-		pendingIndicator := p.pendingSpinner.View()
+		pendingIndicator := p.pendingSpinner.View() + " " + styles.MutedStyle.Render("Agent is working…")
 		if messagesView != "" {
 			messagesView = messagesView + "\n\n" + pendingIndicator
 		} else {
