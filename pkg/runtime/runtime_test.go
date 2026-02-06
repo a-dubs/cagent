@@ -1402,3 +1402,77 @@ func TestToolRejectionWithoutReason(t *testing.T) {
 	require.Equal(t, "The user rejected the tool call.", toolResponse.Response)
 	require.NotContains(t, toolResponse.Response, "Reason:")
 }
+
+func TestYoloExceptWrites_AutoApprovesExceptEditAndWriteFile(t *testing.T) {
+	var safeExecuted bool
+	var writeExecuted bool
+
+	agentTools := []tools.Tool{
+		{
+			Name:       "safe_tool",
+			Parameters: map[string]any{},
+			Handler: func(_ context.Context, _ tools.ToolCall) (*tools.ToolCallResult, error) {
+				safeExecuted = true
+				return tools.ResultSuccess("safe ok"), nil
+			},
+		},
+		{
+			Name:       "write_file",
+			Parameters: map[string]any{},
+			Handler: func(_ context.Context, _ tools.ToolCall) (*tools.ToolCallResult, error) {
+				writeExecuted = true
+				return tools.ResultSuccess("wrote ok"), nil
+			},
+		},
+	}
+
+	prov := &mockProvider{id: "test/mock-model", stream: &mockStream{}}
+	root := agent.New("root", "You are a test agent",
+		agent.WithModel(prov),
+		agent.WithToolSets(newStubToolSet(nil, agentTools, nil)),
+	)
+	tm := team.New(team.WithAgents(root))
+
+	rt, err := NewLocalRuntime(tm, WithSessionCompaction(false), WithModelStore(mockModelStore{}))
+	require.NoError(t, err)
+
+	sess := session.New(
+		session.WithUserMessage("Test"),
+		session.WithYoloExceptWrites(true),
+	)
+	require.False(t, sess.ToolsApproved, "ToolsApproved must remain false for --yolo-except-writes")
+	require.True(t, sess.YoloExceptWrites)
+
+	calls := []tools.ToolCall{
+		{
+			ID:       "call_safe",
+			Type:     "function",
+			Function: tools.FunctionCall{Name: "safe_tool", Arguments: "{}"},
+		},
+		{
+			ID:       "call_write",
+			Type:     "function",
+			Function: tools.FunctionCall{Name: "write_file", Arguments: `{"path":"x","content":"y"}`},
+		},
+	}
+
+	events := make(chan Event, 50)
+
+	// Run in goroutine because the write_file call should require confirmation.
+	go func() {
+		rt.processToolCalls(t.Context(), sess, calls, agentTools, events)
+		close(events)
+	}()
+
+	var sawWriteConfirmation bool
+	for ev := range events {
+		if c, ok := ev.(*ToolCallConfirmationEvent); ok && c.ToolCall.Function.Name == "write_file" {
+			sawWriteConfirmation = true
+			rt.resumeChan <- ResumeApprove()
+		}
+	}
+
+	require.True(t, safeExecuted, "expected safe tool to be auto-approved and executed")
+	require.True(t, sawWriteConfirmation, "expected write_file to require confirmation")
+	require.True(t, writeExecuted, "expected write_file to execute after approval")
+}

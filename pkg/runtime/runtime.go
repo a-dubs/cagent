@@ -1423,8 +1423,21 @@ func (r *LocalRuntime) executeWithApproval(
 		}
 	}
 
-	// 3. Check --yolo flag or read-only hint
-	if sess.ToolsApproved || tool.Annotations.ReadOnlyHint {
+	// 3. Check --yolo / --yolo-except-writes / read-only hint
+	//
+	// - sess.ToolsApproved (--yolo) always auto-approves all tools (unchanged behavior).
+	// - sess.YoloExceptWrites auto-approves all tools *except* file-modifying tools.
+	//   Limitation: we currently match file writes by tool name only (edit_file, write_file).
+	// - tool.Annotations.ReadOnlyHint auto-approves the tool as read-only.
+	if sess.ToolsApproved {
+		runTool()
+		return false
+	}
+	if sess.YoloExceptWrites && !isFileModifyingTool(toolName) {
+		runTool()
+		return false
+	}
+	if tool.Annotations.ReadOnlyHint {
 		runTool()
 		return false
 	}
@@ -1474,6 +1487,12 @@ func (r *LocalRuntime) executeWithApproval(
 		}
 		return true
 	}
+}
+
+func isFileModifyingTool(toolName string) bool {
+	// Note: This is intentionally conservative and name-based; tools like "shell" can
+	// still write files and are *not* treated as file-modifying here.
+	return toolName == builtin.ToolNameEditFile || toolName == builtin.ToolNameWriteFile
 }
 
 // executeToolWithHandler is a common helper that handles tool execution, error handling,
