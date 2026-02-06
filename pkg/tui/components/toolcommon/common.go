@@ -178,6 +178,15 @@ func RenderTool(msg *types.Message, inProgress spinner.Spinner, args, result str
 		resultStyle = styles.ToolErrorMessageStyle
 	}
 
+	// Progressive tool display:
+	// - Pending/Running/Confirmation: render a single compact line with spinner/icon + "~ ..." and no result block.
+	// - Completed/Error: keep existing block-style rendering with args + results/diffs/etc.
+	if msg.ToolStatus == types.ToolStatusPending ||
+		msg.ToolStatus == types.ToolStatusRunning ||
+		msg.ToolStatus == types.ToolStatusConfirmation {
+		return renderInlineToolHeader(msg, inProgress, nameStyle, args, width)
+	}
+
 	icon := Icon(msg, inProgress)
 	name := nameStyle.Render(msg.ToolDefinition.DisplayName())
 
@@ -235,6 +244,58 @@ func RenderTool(msg *types.Message, inProgress spinner.Spinner, args, result str
 	}
 
 	return styles.RenderComposite(styles.ToolMessageStyle.Width(width), content)
+}
+
+func renderInlineToolHeader(
+	msg *types.Message,
+	inProgress spinner.Spinner,
+	toolNameStyle lipgloss.Style,
+	args string,
+	width int,
+) string {
+	// Ensure a stable, single-line layout to minimize list jumpiness.
+	cleanArgs := strings.ReplaceAll(args, "\n", " ")
+	cleanArgs = strings.ReplaceAll(cleanArgs, "\r", " ")
+	cleanArgs = strings.TrimSpace(cleanArgs)
+
+	icon := Icon(msg, inProgress)
+
+	// Prefer the agent-provided friendly description when present.
+	friendlyDesc := tools.ExtractDescription(msg.ToolCall.Function.Arguments)
+	prefix := "~"
+	if msg.ToolStatus == types.ToolStatusConfirmation {
+		prefix = "~ confirm"
+	}
+
+	var content string
+	if friendlyDesc != "" {
+		desc := styles.ToolDescription.Render(prefix + " " + friendlyDesc)
+		toolName := toolNameStyle.UnsetPadding().Render("(" + msg.ToolDefinition.DisplayName() + ")")
+		content = fmt.Sprintf("%s %s %s", icon, desc, toolName)
+	} else {
+		// No friendly description; fall back to tool name + args.
+		// Use tool name style so users can still quickly identify the tool.
+		content = fmt.Sprintf("%s%s %s", icon, toolNameStyle.Render(prefix), toolNameStyle.Render(msg.ToolDefinition.DisplayName()))
+	}
+
+	if cleanArgs == "" {
+		return styles.RenderComposite(styles.ToolMessageStyle.Width(width), content)
+	}
+
+	// Keep args on the same line and truncate to fit.
+	remainingWidth := max(width-lipgloss.Width(content)-1, 1)
+	trimmedArgs := cleanArgs
+	if lipgloss.Width(trimmedArgs) > remainingWidth {
+		trimmedArgs = TruncateText(trimmedArgs, remainingWidth)
+	}
+
+	// Preserve denied/rejected styling when applicable.
+	argsStyle := styles.ToolMessageStyle
+	if isDeniedOrRejectedToolCall(msg) {
+		argsStyle = styles.ToolDeniedStyle
+	}
+
+	return styles.RenderComposite(styles.ToolMessageStyle.Width(width), content+" "+argsStyle.Render(trimmedArgs))
 }
 
 // ShortenPath replaces home directory with ~ for cleaner display.

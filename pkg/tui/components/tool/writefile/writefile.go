@@ -41,6 +41,21 @@ func render(msg *types.Message, s spinner.Spinner, sessionState service.SessionS
 		)
 	}
 
+	// While pending/running/awaiting confirmation, render only the compact inline header.
+	// The shared renderer handles friendly descriptions and status icons/spinners.
+	if msg.ToolStatus == types.ToolStatusPending ||
+		msg.ToolStatus == types.ToolStatusRunning ||
+		msg.ToolStatus == types.ToolStatusConfirmation {
+		return toolcommon.RenderTool(
+			msg,
+			s,
+			toolcommon.ShortenPath(meta.Path),
+			"",
+			width,
+			sessionState.HideToolResults(),
+		)
+	}
+
 	// Header line (friendly header if available; otherwise standard tool header).
 	header := ""
 	if friendly, ok := toolcommon.RenderFriendlyHeader(msg, s, styles.ToolName); ok {

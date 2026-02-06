@@ -38,6 +38,21 @@ func render(
 		return ""
 	}
 
+	// While pending/running/awaiting confirmation, render only the compact inline header.
+	// The shared renderer handles friendly descriptions and status icons/spinners.
+	if msg.ToolStatus == types.ToolStatusPending ||
+		msg.ToolStatus == types.ToolStatusRunning ||
+		msg.ToolStatus == types.ToolStatusConfirmation {
+		return toolcommon.RenderTool(
+			msg,
+			s,
+			toolcommon.ShortenPath(args.Path),
+			"",
+			width,
+			sessionState.HideToolResults(),
+		)
+	}
+
 	// When the tool failed, render a single-line error header
 	// consistent with other tool error renderings.
 	if msg.ToolStatus == types.ToolStatusError {

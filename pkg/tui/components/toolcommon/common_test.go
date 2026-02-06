@@ -110,6 +110,43 @@ func TestRenderTool_DeniedOrRejectedToolCallUsesStrikethroughStyle(t *testing.T)
 	})
 }
 
+func TestRenderTool_ProgressiveInlinePendingVsExpandedCompleted(t *testing.T) {
+	t.Parallel()
+
+	s := spinner.New(spinner.ModeSpinnerOnly, styles.SpinnerDotsAccentStyle)
+
+	msg := &types.Message{
+		Type: types.MessageTypeToolCall,
+		ToolCall: tools.ToolCall{
+			ID: "call-1",
+			Function: tools.FunctionCall{
+				Name:      "read_file",
+				Arguments: `{"path":"/tmp/file.txt","description":"Reading config"}`,
+			},
+		},
+		ToolDefinition: tools.Tool{Name: "read_file"},
+	}
+
+	t.Run("pending_is_single_line_and_has_no_result_block", func(t *testing.T) {
+		msg.ToolStatus = types.ToolStatusPending
+
+		out := RenderTool(msg, s, `{"path":"/tmp/file.txt"}`, "SHOULD_NOT_RENDER", 80, false)
+		assert.NotContains(t, out, "SHOULD_NOT_RENDER")
+		assert.NotContains(t, out, "\n", "pending tool calls should render as a single compact line")
+		assert.Contains(t, out, "~", "pending tool calls should use the compact ~ prefix")
+		assert.Contains(t, out, "Reading config", "pending tool calls should prefer friendly descriptions")
+	})
+
+	t.Run("completed_expands_and_can_show_result", func(t *testing.T) {
+		msg.ToolStatus = types.ToolStatusCompleted
+
+		out := RenderTool(msg, s, `{"path":"/tmp/file.txt"}`, "OK\nline2", 80, false)
+		assert.Contains(t, out, "\n", "completed tool calls should expand to multi-line output when result is multi-line")
+		assert.Contains(t, out, "OK")
+		assert.Contains(t, out, "line2")
+	})
+}
+
 func TestTryFixPartialJSON(t *testing.T) {
 	tests := []struct {
 		name      string
