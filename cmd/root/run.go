@@ -398,12 +398,17 @@ func (f *runExecFlags) createLocalRuntimeAndSession(ctx context.Context, loadRes
 
 		slog.Debug("Loaded existing session", "session_id", resolvedID, "session_ref", f.sessionID, "agent", f.agentName)
 	} else {
+		wd, err := os.Getwd()
+		if err != nil {
+			return nil, nil, fmt.Errorf("getting working directory: %w", err)
+		}
 		sess = session.New(
 			session.WithMaxIterations(agent.MaxIterations()),
 			session.WithToolsApproved(f.autoApprove),
 			session.WithYoloExceptWrites(f.yoloExceptWrites),
 			session.WithHideToolResults(f.hideToolResults),
 			session.WithThinking(agent.ThinkingConfigured()),
+			session.WithWorkingDir(wd),
 		)
 		// Session is stored lazily on first UpdateSession call (when content is added)
 		// This avoids creating empty sessions in the database
