@@ -47,4 +47,3 @@ func TestToolConfirmationDialog_ApproveAllRespectsYoloExceptWrites(t *testing.T)
 	require.True(t, foundResume, "expected a runtime resume message")
 	require.False(t, sessionState.YoloMode(), "dialog should not flip full yolo mode when --yolo-except-writes is active")
 }
-

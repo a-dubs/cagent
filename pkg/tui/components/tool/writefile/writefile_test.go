@@ -12,17 +12,17 @@ import (
 
 type testSessionState struct{}
 
-func (testSessionState) SplitDiffView() bool                         { return false }
-func (testSessionState) HasExplicitDiffPreference() bool             { return false }
-func (testSessionState) YoloMode() bool                              { return false }
-func (testSessionState) YoloExceptWrites() bool                      { return false }
-func (testSessionState) Thinking() bool                              { return false }
-func (testSessionState) HideToolResults() bool                        { return false }
-func (testSessionState) CurrentAgentName() string                     { return "" }
-func (testSessionState) PreviousMessage() *types.Message              { return nil }
-func (testSessionState) SessionTitle() string                         { return "" }
-func (testSessionState) AvailableAgents() []runtime.AgentDetails      { return nil }
-func (testSessionState) GetCurrentAgent() runtime.AgentDetails        { return runtime.AgentDetails{} }
+func (testSessionState) SplitDiffView() bool                     { return false }
+func (testSessionState) HasExplicitDiffPreference() bool         { return false }
+func (testSessionState) YoloMode() bool                          { return false }
+func (testSessionState) YoloExceptWrites() bool                  { return false }
+func (testSessionState) Thinking() bool                          { return false }
+func (testSessionState) HideToolResults() bool                   { return false }
+func (testSessionState) CurrentAgentName() string                { return "" }
+func (testSessionState) PreviousMessage() *types.Message         { return nil }
+func (testSessionState) SessionTitle() string                    { return "" }
+func (testSessionState) AvailableAgents() []runtime.AgentDetails { return nil }
+func (testSessionState) GetCurrentAgent() runtime.AgentDetails   { return runtime.AgentDetails{} }
 
 func TestWriteFileRenderer_ShowsDiffOnOverwrite(t *testing.T) {
 	t.Parallel()
@@ -60,4 +60,3 @@ func TestWriteFileRenderer_ShowsDiffOnOverwrite(t *testing.T) {
 		t.Fatalf("expected view to include new content %q, got:\n%s", "after", view)
 	}
 }
-
