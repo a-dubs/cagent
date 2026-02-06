@@ -2,7 +2,9 @@ package builtin
 
 import (
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,6 +53,24 @@ func TestShellTool_HandlerWithCwd(t *testing.T) {
 	// The output might contain extra newlines or other characters,
 	// so we just check if it contains the temp dir path
 	assert.Contains(t, result.Output, tmpDir)
+}
+
+func TestShellTool_StreamsOutputWhenStreamerPresent(t *testing.T) {
+	tool := NewShellTool(nil, &config.RuntimeConfig{Config: config.Config{WorkingDir: t.TempDir()}}, nil)
+
+	var streamed strings.Builder
+	ctx := tools.WithOutputStreamer(t.Context(), func(delta string) {
+		streamed.WriteString(delta)
+	})
+
+	result, err := tool.handler.RunShell(ctx, RunShellArgs{
+		Cmd:     "printf 'a'; printf 'b'; printf 'c'",
+		Cwd:     "",
+		Timeout: int((5 * time.Second).Seconds()),
+	})
+	require.NoError(t, err)
+	require.Contains(t, result.Output, "abc")
+	require.Contains(t, streamed.String(), "abc")
 }
 
 func TestShellTool_HandlerError(t *testing.T) {

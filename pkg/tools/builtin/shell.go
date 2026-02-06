@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -167,9 +168,18 @@ func (h *shellHandler) runNativeCommand(timeoutCtx, ctx context.Context, command
 	cmd.Dir = cwd
 	cmd.SysProcAttr = platformSpecificSysProcAttr()
 
-	var outBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &outBuf
+	// Protect memory usage if commands are noisy.
+	outBuf := &bytes.Buffer{}
+	limitedOut := &limitedWriter{buf: outBuf, maxSize: 10 * 1024 * 1024}
+
+	// Stream output incrementally if the runtime provided a streamer in context.
+	// This is a display-only feature; it does not affect execution.
+	var outWriter io.Writer = limitedOut
+	if stream, ok := tools.GetOutputStreamer(ctx); ok && stream != nil {
+		outWriter = io.MultiWriter(limitedOut, tools.NewStreamingWriter(stream))
+	}
+	cmd.Stdout = outWriter
+	cmd.Stderr = outWriter
 
 	if err := cmd.Start(); err != nil {
 		return tools.ResultError(fmt.Sprintf("Error starting command: %s", err))

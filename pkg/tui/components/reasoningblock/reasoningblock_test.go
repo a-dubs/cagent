@@ -10,9 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/docker/cagent/pkg/tools"
+	"github.com/docker/cagent/pkg/tools/builtin"
 	"github.com/docker/cagent/pkg/tui/animation"
 	"github.com/docker/cagent/pkg/tui/service"
 	"github.com/docker/cagent/pkg/tui/types"
+	"github.com/docker/cagent/pkg/session"
 )
 
 func TestReasoningBlockCollapsed(t *testing.T) {
@@ -333,6 +335,30 @@ func TestReasoningBlockUpdateToolResult(t *testing.T) {
 
 	// Verify the tool is still tracked
 	assert.True(t, block.HasToolCall("call-1"))
+}
+
+func TestReasoningBlockAppendToolOutput(t *testing.T) {
+	t.Parallel()
+
+	sessionState := service.NewSessionState(&session.Session{})
+	block := New("block-1", "agent", sessionState)
+	block.SetSize(80, 20)
+
+	tc := tools.ToolCall{
+		ID:       "call-1",
+		Type:     tools.ToolType("function"),
+		Function: tools.FunctionCall{Name: builtin.ToolNameShell, Arguments: `{"cmd":"echo hi"}`},
+	}
+	toolDef := tools.Tool{Name: builtin.ToolNameShell, Category: "shell", Annotations: tools.ToolAnnotations{Title: "Shell"}}
+	msg := types.ToolCallMessage("agent", tc, toolDef, types.ToolStatusRunning)
+
+	_ = block.AddToolCall(msg)
+
+	_ = block.AppendToolOutput("call-1", "hello\n")
+	require.True(t, block.HasToolCall("call-1"))
+
+	view := ansi.Strip(block.View())
+	require.Contains(t, view, "hello")
 }
 
 func TestReasoningBlockCompletedToolGracePeriod(t *testing.T) {

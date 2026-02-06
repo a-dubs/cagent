@@ -1517,6 +1517,16 @@ func (r *LocalRuntime) executeToolWithHandler(
 
 	events <- ToolCall(toolCall, tool, a.Name())
 
+	// For shell tool calls, attach a best-effort output streamer so the tool can
+	// emit incremental output while running.
+	if toolCall.Function.Name == builtin.ToolNameShell {
+		ctx = tools.WithOutputStreamer(ctx, func(delta string) {
+			// Forward chunks as events so UIs can update the running tool display.
+			// This is intentionally best-effort and should never block tool execution.
+			events <- ShellToolOutput(toolCall.ID, a.Name(), delta)
+		})
+	}
+
 	res, duration, err := execute(ctx)
 
 	telemetry.RecordToolCall(ctx, toolCall.Function.Name, sess.ID, a.Name(), duration, err)

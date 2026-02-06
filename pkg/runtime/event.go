@@ -171,8 +171,9 @@ func Error(msg string) Event {
 }
 
 type ShellOutputEvent struct {
-	Type   string `json:"type"`
-	Output string `json:"output"`
+	Type       string `json:"type"`
+	Output     string `json:"output"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
 	AgentContext
 }
 
@@ -181,6 +182,15 @@ func ShellOutput(output string) Event {
 		Type:         "shell",
 		Output:       output,
 		AgentContext: newAgentContext(""),
+	}
+}
+
+func ShellToolOutput(toolCallID, agentName, output string) Event {
+	return &ShellOutputEvent{
+		Type:         "shell",
+		Output:       output,
+		ToolCallID:   toolCallID,
+		AgentContext: newAgentContext(agentName),
 	}
 }
 

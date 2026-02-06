@@ -75,6 +75,12 @@ func (p *chatPage) handleRuntimeEvent(msg tea.Msg) (bool, tea.Cmd) {
 
 	case *runtime.ShellOutputEvent:
 		clearPendingCmd := p.markFirstOutputArrived()
+		// If this shell output is associated with a running tool call, update that
+		// tool block instead of appending a standalone shell-output message.
+		if msg.ToolCallID != "" {
+			outputCmd := p.messages.AppendToolOutput(msg.ToolCallID, msg.Output)
+			return true, tea.Batch(clearPendingCmd, outputCmd)
+		}
 		outputCmd := p.messages.AddShellOutputMessage(msg.Output)
 		return true, tea.Batch(clearPendingCmd, outputCmd)
 

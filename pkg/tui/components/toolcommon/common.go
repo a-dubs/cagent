@@ -10,6 +10,7 @@ import (
 
 	"github.com/docker/cagent/pkg/paths"
 	"github.com/docker/cagent/pkg/tools"
+	"github.com/docker/cagent/pkg/tools/builtin"
 	"github.com/docker/cagent/pkg/tui/components/spinner"
 	"github.com/docker/cagent/pkg/tui/styles"
 	"github.com/docker/cagent/pkg/tui/types"
@@ -181,6 +182,25 @@ func RenderTool(msg *types.Message, inProgress spinner.Spinner, args, result str
 	// Progressive tool display:
 	// - Pending/Running/Confirmation: render a single compact line with spinner/icon + "~ ..." and no result block.
 	// - Completed/Error: keep existing block-style rendering with args + results/diffs/etc.
+	// Exception: while the shell tool is running, we may stream partial output into
+	// msg.Content. In that case, render the tool in block mode so the user can see
+	// the output incrementally.
+	if (msg.ToolStatus == types.ToolStatusPending || msg.ToolStatus == types.ToolStatusRunning) &&
+		msg.ToolCall.Function.Name == builtin.ToolNameShell &&
+		strings.TrimSpace(msg.Content) != "" &&
+		!hideToolResults {
+		// Reuse the existing completion-style rendering, but keep the running icon/spinner.
+		icon := Icon(msg, inProgress)
+		name := nameStyle.Render(msg.ToolDefinition.DisplayName())
+		content := fmt.Sprintf("%s%s", icon, name)
+		if args != "" {
+			content += " " + args
+		}
+		formattedResult := FormatToolResult(msg.Content, width)
+		content += "\n" + resultStyle.MarginLeft(styles.ToolCompletedIcon.GetMarginLeft()).Render(formattedResult)
+		return styles.RenderComposite(styles.ToolMessageStyle.Width(width), content)
+	}
+
 	if msg.ToolStatus == types.ToolStatusPending ||
 		msg.ToolStatus == types.ToolStatusRunning ||
 		msg.ToolStatus == types.ToolStatusConfirmation {

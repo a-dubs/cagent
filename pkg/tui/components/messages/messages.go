@@ -56,6 +56,7 @@ type Model interface {
 	AppendToLastMessage(agentName, content string) tea.Cmd
 	AppendReasoning(agentName, content string) tea.Cmd
 	AddShellOutputMessage(content string) tea.Cmd
+	AppendToolOutput(toolCallID, delta string) tea.Cmd
 	LoadFromSession(sess *session.Session) tea.Cmd
 
 	ScrollToBottom() tea.Cmd
@@ -942,6 +943,50 @@ func (m *model) AddErrorMessage(content string) tea.Cmd {
 
 func (m *model) AddShellOutputMessage(content string) tea.Cmd {
 	return m.addMessage(types.ShellOutput(content))
+}
+
+// AppendToolOutput appends incremental output to an in-progress tool call.
+// This is used for streaming shell output into the tool block while the command runs.
+func (m *model) AppendToolOutput(toolCallID, delta string) tea.Cmd {
+	if toolCallID == "" || delta == "" {
+		return nil
+	}
+
+	// Prefer updating tool calls that live inside a reasoning block.
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].Type != types.MessageTypeAssistantReasoningBlock {
+			continue
+		}
+		if block, ok := m.views[i].(*reasoningblock.Model); ok && block.HasToolCall(toolCallID) {
+			cmd := block.AppendToolOutput(toolCallID, delta)
+			m.invalidateItem(i)
+			return cmd
+		}
+	}
+
+	// Fallback: standalone tool call message in the main message list.
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		msg := m.messages[i]
+		if msg.Type != types.MessageTypeToolCall || msg.ToolCall.ID != toolCallID {
+			continue
+		}
+		msg.Content += strings.ReplaceAll(delta, "\t", "    ")
+		// Ensure we're in a running state while output is streaming.
+		if msg.ToolStatus == types.ToolStatusPending {
+			msg.ToolStatus = types.ToolStatusRunning
+		}
+		m.messages[i] = msg
+
+		if i < len(m.views) {
+			view := m.createToolCallView(msg)
+			m.views[i] = view
+			m.invalidateItem(i)
+			return view.Init()
+		}
+		break
+	}
+
+	return nil
 }
 
 func (m *model) AddAssistantMessage() tea.Cmd {

@@ -257,6 +257,33 @@ func (m *Model) UpdateToolResult(toolCallID, content string, status types.ToolSt
 	return nil
 }
 
+// AppendToolOutput appends incremental output to a tool call without completing it.
+// This is primarily used for streaming shell output into the running tool block.
+func (m *Model) AppendToolOutput(toolCallID, delta string) tea.Cmd {
+	if toolCallID == "" || delta == "" {
+		return nil
+	}
+	for i, entry := range m.toolEntries {
+		if entry.msg.ToolCall.ID != toolCallID {
+			continue
+		}
+
+		entry.msg.Content += strings.ReplaceAll(delta, "\t", "    ")
+		if entry.msg.ToolStatus == types.ToolStatusPending {
+			entry.msg.ToolStatus = types.ToolStatusRunning
+		}
+
+		// Recreate view to pick up new content. For performance, we keep this localized
+		// to the one tool entry.
+		view := tool.New(entry.msg, m.sessionState)
+		view.SetSize(m.contentWidth(), 0)
+		m.toolEntries[i] = entry
+		m.toolEntries[i].view = view
+		return view.Init()
+	}
+	return nil
+}
+
 // HasToolCall returns true if the block contains the given tool call ID.
 func (m *Model) HasToolCall(toolCallID string) bool {
 	for _, entry := range m.toolEntries {
